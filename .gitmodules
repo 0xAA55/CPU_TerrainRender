@@ -1,0 +1,7 @@
+[submodule "mathutil"]
+	path = mathutil
+	url = https://github.com/0xAA55/mathutil.git
+
+[submodule "C_dict"]
+	path = C_dict
+	url = https://github.com/0xAA55/C_dict.git
