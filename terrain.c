@@ -200,7 +200,7 @@ static int GenerateK(Terrain_p t, dict_p d_landview, FILE *fp_log, const char *P
 	{
 		size_t
 			cur_x = (size_t)i % w,
-			cur_y = (size_t)i / h;
+			cur_y = (size_t)i / w;
 		ptrdiff_t sx, sy;
 		float MaxK = 0;
 		uint32_t MaxK_x = (uint32_t)cur_x;
@@ -245,7 +245,7 @@ static int GenerateK(Terrain_p t, dict_p d_landview, FILE *fp_log, const char *P
 		{
 			size_t
 				cur_x = (size_t)i % w,
-				cur_y = (size_t)i / h;
+				cur_y = (size_t)i / w;
 			ptrdiff_t sx, sy;
 			float MaxK = ImgBuffer_FetchF32(K1, cur_x, cur_y);
 			uint32_t MaxK_xy = ImgBuffer_FetchU32(K2, cur_x, cur_y);
@@ -310,7 +310,7 @@ static int GenerateK(Terrain_p t, dict_p d_landview, FILE *fp_log, const char *P
 	{
 		size_t
 			cur_x = (size_t)i % w,
-			cur_y = (size_t)i / h;
+			cur_y = (size_t)i / w;
 		union Pixel
 		{
 			uint8_t u8[4];
@@ -481,9 +481,78 @@ void Terrain_SetCamera(Terrain_p t, vec4_t CamPos, vec4_t CamDir, vec4_t CamUp, 
 	t->FOV = FOV;
 }
 
-void Terrain_Render(Terrain_p t)
+static uint32_t ARGB(int32_t R, int32_t G, int32_t B, int32_t A)
+{
+	union Color
+	{
+		uint8_t u8[4];
+		uint32_t u32;
+	}Color = {B, G, R, A};
+	return Color.u32;
+}
+
+static uint32_t ARGBSafe(int32_t R, int32_t G, int32_t B, int32_t A)
+{
+	if (R > 255) R = 255; else if (R < 0) R = 0;
+	if (G > 255) G = 255; else if (G < 0) G = 0;
+	if (B > 255) B = 255; else if (B < 0) B = 0;
+	if (A > 255) A = 255; else if (A < 0) A = 0;
+	return ARGB(R, G, B, A);
+}
+
+static int Map_Raycast(Terrain_p t, vec4_t RayOrig, vec4_t RayDir, vec4_p pCastPoint, float *pCastDist, float MaxDist)
 {
 
+}
+
+void Terrain_Render(Terrain_p t)
+{
+	ptrdiff_t i;
+	ptrdiff_t PixelCount;
+	ImgBuffer_p LandView, ColorBuf;
+	size_t w, h, sw, sh;
+
+	if (!t) return;
+
+	LandView = t->LandView;
+	ColorBuf = t->CPUCan->ColorBuf;
+	w = LandView->Width;
+	h = LandView->Height;
+	PixelCount = (ptrdiff_t)(w * h);
+
+#pragma omp parallel for
+	for (i = 0; i < PixelCount; i++)
+	{
+		size_t x, y;
+
+		x = (size_t)i % w;
+		y = (size_t)i / w;
+
+		if (t->interleave)
+		{
+			if (((x & 1) ^ (y & 1)) == (t->FrameCounter & 1))
+				continue;
+		}
+
+		ImgBuffer_FetchU32(LandView, x, y) = ARGB(x + t->FrameCounter, y + t->FrameCounter, i, 0xff);
+	}
+
+	sw = w; sh = h;
+	w = ColorBuf->Width;
+	h = ColorBuf->Height;
+	PixelCount = (ptrdiff_t)(w * h);
+#pragma omp parallel for
+	for (i = 0; i < PixelCount; i++)
+	{
+		size_t x, y, sx, sy;
+		x = (size_t)i % w;
+		y = (size_t)i / w;
+		sx = x / t->x_scale;
+		sy = y / t->y_scale;
+		ImgBuffer_FetchU32(ColorBuf, x, y) = ImgBuffer_FetchU32(LandView, sx, sy);
+	}
+
+	t->FrameCounter++;
 }
 
 void Terrain_Free(Terrain_p t)
