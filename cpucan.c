@@ -35,8 +35,8 @@ CPUCan_p CPUCan_Create(uint32_t Width, uint32_t Height)
 	c->DepthBuf = ImgBuffer_Create(Width, Height, 4, 4);
 	if (!c->ColorBuf || !c->DepthBuf) goto FailExit;
 
-	if (!CPUCan_CreateTexture(c, Width, Height, "ColorBuf")) goto FailExit;
-	if (!CPUCan_CreateTexture(c, Width, Height, "DepthBuf")) goto FailExit;
+	if (!CPUCan_SetTexture(c, "ColorBuf", c->ColorBuf)) goto FailExit;
+	if (!CPUCan_SetTexture(c, "DepthBuf", c->DepthBuf)) goto FailExit;
 
 	return c;
 FailExit:
@@ -64,8 +64,8 @@ CPUCan_p CPUCan_CreateWithRGBAFB(uint32_t Width, uint32_t Height, void *Address_
 	c->DepthBuf = ImgBuffer_Create(Width, Height, 4, 4);
 	if (!c->ColorBuf || !c->DepthBuf) goto FailExit;
 
-	if (!CPUCan_CreateTexture(c, Width, Height, "ColorBuf")) goto FailExit;
-	if (!CPUCan_CreateTexture(c, Width, Height, "DepthBuf")) goto FailExit;
+	if (!CPUCan_SetTexture(c, "ColorBuf", c->ColorBuf)) goto FailExit;
+	if (!CPUCan_SetTexture(c, "DepthBuf", c->DepthBuf)) goto FailExit;
 
 	return c;
 FailExit:
