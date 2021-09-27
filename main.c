@@ -1,5 +1,5 @@
-#include"cpucan.h"
 #include"terrain.h"
+#include"dictcfg.h"
 
 #include<Windows.h>
 #include<tchar.h>
@@ -23,7 +23,9 @@ typedef struct AppData_struct
 	// 离屏缓冲区像素数据指针
 	uint32_t *BBPixelData;
 
+	FILE *fp_log;
 	CPUCan_p CPUCan;
+	dict_p Config;
 	Terrain_p Terrain;
 }AppData_t, * AppData_p;
 
@@ -37,7 +39,7 @@ static AppData_p CreateAppData(HWND hWnd)
 {
 	HDC hDCTemp = NULL;
 	HBITMAP DIB = NULL;
-	RECT rc;
+	RECT rw, rc;
 	AppData_p RD = NULL;
 	char StrBuf[1024];
 	struct
@@ -45,18 +47,34 @@ static AppData_p CreateAppData(HWND hWnd)
 		BITMAPINFOHEADER BMIF;
 		uint32_t Bitfields[4];
 	}BMIF32;
+	int CfgXres, CfgYres;
+	dict_p d_render = NULL;
 
 	// 分配内存
 	RD = malloc(sizeof *RD);
 	if (!RD) return NULL;
 	memset(RD, 0, sizeof * RD);
 
+	RD->fp_log = fopen("app.log", "a");
+	if (!RD->fp_log) goto FailExit;
 	RD->hWnd = hWnd;
+	RD->Config = dictcfg_load("config.cfg", RD->fp_log);
+	if (!RD->Config) goto FailExit;
+	d_render = dictcfg_section(RD->Config, "[render]");
+	CfgXres = dictcfg_getint(d_render, "x_res", 1024);
+	CfgYres = dictcfg_getint(d_render, "y_res", 768);
 
-	// 获取窗口大小
+	// 按照设置来配置窗口大小
+	GetWindowRect(hWnd, &rw);
 	GetClientRect(hWnd, &rc);
-	RD->BBWidth = rc.right - rc.left;
-	RD->BBHeight = rc.bottom - rc.top;
+	MoveWindow(hWnd,
+		rw.left,
+		rw.top,
+		CfgXres + ((rw.right - rw.left) - (rc.right - rc.left)),
+		CfgYres + ((rw.bottom - rw.top) - (rc.bottom - rc.top)),
+		FALSE);
+	RD->BBWidth = CfgXres;
+	RD->BBHeight = CfgYres;
 	if ((int32_t)RD->BBWidth <= 0 || (int32_t)RD->BBHeight <= 0) goto FailExit;
 
 	// 填写位图信息
@@ -92,7 +110,7 @@ static AppData_p CreateAppData(HWND hWnd)
 	if (!RD->CPUCan) goto FailExit;
 
 	snprintf(StrBuf, sizeof StrBuf, "maps\\%d", (rand() % 2) + 1);
-	RD->Terrain = Terrain_Create(RD->CPUCan, StrBuf);
+	RD->Terrain = Terrain_Create(RD->CPUCan, ".", StrBuf, RD->Config);
 	if (!RD->Terrain) goto FailExit;
 
 	return RD;
@@ -106,9 +124,11 @@ FailExit:
 static void DeleteAppData(AppData_p RD)
 {
 	if (!RD) return;
+	dict_delete(RD->Config);
 	Terrain_Free(RD->Terrain);
 	CPUCan_Delete(RD->CPUCan);
 	DeleteDC(RD->BBDC);
+	if (RD->fp_log) fclose(RD->fp_log);
 	free(RD);
 }
 
