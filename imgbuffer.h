@@ -28,7 +28,7 @@ UniformBitmap_p ImgBuffer_ConvertToUniformBitmap(ImgBuffer_p *ppIB);
 void ImgBuffer_Blt(ImgBuffer_p pDst, int x, int y, int w, int h, ImgBuffer_p pSrc, int src_x, int src_y);
 void ImgBuffer_Destroy(ImgBuffer_p pBuf);
 
-#define ImgBuffer_Fetch(pBuf,x,y,type) (((type*)pBuf->RowPointers[y])[x])
+#define ImgBuffer_Fetch(pBuf,x,y,type) (((type*)((pBuf)->RowPointers[y]))[x])
 
 #define ImgBuffer_FetchI8(pBuf,x,y)  ImgBuffer_Fetch(pBuf, x, y, int8_t)
 #define ImgBuffer_FetchU8(pBuf,x,y)  ImgBuffer_Fetch(pBuf, x, y, uint8_t)
