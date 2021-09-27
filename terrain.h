@@ -34,6 +34,8 @@ typedef struct Terrain_struct
 
 	ImgBuffer_p LandView;
 	int IterCount;
+
+	uint64_t FrameCounter;
 }Terrain_t, *Terrain_p;
 
 Terrain_p Terrain_Create(CPUCan_p CPUCan, const char *WorkDir, const char *MapDir, dict_p Config);
