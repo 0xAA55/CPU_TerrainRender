@@ -1,8 +1,8 @@
 .vs
-*.sln
 *.vcxproj.filters
 *.vcxproj.user
 *.o
+*.log
 intermediate/
 lib/
 out/
