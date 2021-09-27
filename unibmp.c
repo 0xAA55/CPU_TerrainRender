@@ -77,11 +77,12 @@ static uint32_t GetBitfieldBitCount(uint32_t Bitfield)
 // 生成颜色值
 static uint32_t ARGB(uint8_t R, uint8_t G, uint8_t B, uint8_t A)
 {
-	return
-		((uint32_t)A << 24) |
-		((uint32_t)R << 16) |
-		((uint32_t)G << 8) |
-		((uint32_t)B << 0);
+	union Pixel
+	{
+		uint8_t u8[4];
+		uint32_t u32;
+	}Block = { B, G, R, A};
+	return Block.u32;
 }
 
 // 从文件创建位图
@@ -454,14 +455,10 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 				uint32_t ABC = ABitCount;
 				PixelPointer += BytesPerPixels;
 
-				if (RBC) while (RBC < 8) { RV |= RV >> RBC; RBC *= 2; }
-				else RV = 255;
-				if (GBC) while (GBC < 8) { GV |= GV >> GBC; GBC *= 2; }
-				else GV = 255;
-				if (BBC) while (BBC < 8) { BV |= BV >> BBC; BBC *= 2; }
-				else BV = 255;
-				if (ABC) while (ABC < 8) { AV |= AV >> ABC; ABC *= 2; }
-				else AV = 255;
+				if (RBC) while (RBC < 8) { RV |= RV >> RBC; RBC *= 2; } else RV = 255;
+				if (GBC) while (GBC < 8) { GV |= GV >> GBC; GBC *= 2; } else GV = 255;
+				if (BBC) while (BBC < 8) { BV |= BV >> BBC; BBC *= 2; } else BV = 255;
+				if (ABC) while (ABC < 8) { AV |= AV >> ABC; ABC *= 2; } else AV = 255;
 
 				Row[x] = ARGB(RBC, GBC, BBC, ABC);
 			}
@@ -483,6 +480,121 @@ FailExit:
 	UB_Free(&UB);
 	free(ReadInLineBuffer);
 	return NULL;
+}
+
+int UB_SaveToFile_24(UniformBitmap_p UB, const char *FilePath)
+{
+	FILE *fp = NULL;
+	size_t Pitch;
+	uint8_t *Buffer = NULL;
+	uint32_t x, y;
+	BitmapFileHeader_t BMFH;
+	BitmapInfoHeader_t BMIF;
+
+	if (!UB || !FilePath) return 0;
+
+	fp = fopen(FilePath, "wb");
+	if (!fp) return 0;
+
+	BMIF.biSize = 40;
+	BMIF.biWidth = UB->Width;
+	BMIF.biHeight = UB->Height;
+	BMIF.biPlanes = 1;
+	BMIF.biBitCount = 24;
+	BMIF.biCompression = 0;
+	BMIF.biSizeImage = 0;
+	BMIF.biXPelsPerMeter = 0;
+	BMIF.biYPelsPerMeter = 0;
+	BMIF.biClrUsed = 0;
+	BMIF.biClrImportant = 0;
+
+	Pitch = ((size_t)(BMIF.biWidth * BMIF.biBitCount - 1) / 32 + 1) * 4;
+
+	BMFH.bfType = 0x4D42;
+	BMFH.bfSize = (uint32_t)(sizeof BMFH + sizeof BMIF + Pitch * UB->Height);
+	BMFH.bfReserved1 = 0;
+	BMFH.bfReserved2 = 0;
+	BMFH.bfOffbits = sizeof BMFH + sizeof BMIF;
+
+	if (!fwrite(&BMFH, sizeof BMFH, 1, fp)) goto FailExit;
+	if (!fwrite(&BMIF, sizeof BMIF, 1, fp)) goto FailExit;
+
+	Buffer = malloc(Pitch);
+	if (!Buffer) goto FailExit;
+	memset(Buffer, 0, Pitch);
+	for (y = 0; y < UB->Height; y++)
+	{
+		union Pixel
+		{
+			uint8_t u8[4];
+			uint32_t u32;
+		} * RowPtr = (void*)UB->RowPointers[UB->Height - 1 - y];
+		uint8_t *Ptr = Buffer;
+		for (x = 0; x < UB->Width; x++)
+		{
+			*Ptr++ = RowPtr[x].u8[0];
+			*Ptr++ = RowPtr[x].u8[1];
+			*Ptr++ = RowPtr[x].u8[2];
+		}
+		if (!fwrite(Buffer, Pitch, 1, fp)) goto FailExit;
+	}
+
+	free(Buffer);
+	fclose(fp);
+	return 1;
+FailExit:
+	free(Buffer);
+	if (fp) fclose(fp);
+	return 0;
+}
+
+int UB_SaveToFile_32(UniformBitmap_p UB, const char *FilePath)
+{
+	FILE *fp = NULL;
+	size_t Pitch;
+	uint32_t y;
+	BitmapFileHeader_t BMFH;
+	BitmapInfoHeader_t BMIF;
+
+	if (!UB || !FilePath) return 0;
+
+	fp = fopen(FilePath, "wb");
+	if (!fp) return 0;
+
+	BMIF.biSize = 40;
+	BMIF.biWidth = UB->Width;
+	BMIF.biHeight = UB->Height;
+	BMIF.biPlanes = 1;
+	BMIF.biBitCount = 32;
+	BMIF.biCompression = 0;
+	BMIF.biSizeImage = 0;
+	BMIF.biXPelsPerMeter = 0;
+	BMIF.biYPelsPerMeter = 0;
+	BMIF.biClrUsed = 0;
+	BMIF.biClrImportant = 0;
+
+	Pitch = (size_t)BMIF.biWidth * 4;
+
+	BMFH.bfType = 0x4D42;
+	BMFH.bfSize = (uint32_t)(sizeof BMFH + sizeof BMIF + Pitch * UB->Height);
+	BMFH.bfReserved1 = 0;
+	BMFH.bfReserved2 = 0;
+	BMFH.bfOffbits = sizeof BMFH + sizeof BMIF;
+
+	if (!fwrite(&BMFH, sizeof BMFH, 1, fp)) goto FailExit;
+	if (!fwrite(&BMIF, sizeof BMIF, 1, fp)) goto FailExit;
+
+	for (y = 0; y < UB->Height; y++)
+	{
+		uint32_t *RowPtr = UB->RowPointers[UB->Height - 1 - y];
+		if (!fwrite(RowPtr, Pitch, 1, fp)) goto FailExit;
+	}
+
+	fclose(fp);
+	return 1;
+FailExit:
+	if (fp) fclose(fp);
+	return 0;
 }
 
 // 释放位图资源

@@ -29,6 +29,9 @@ typedef struct UniformBitmap_struct
 // 如果整个图像的Alpha通道皆为0（或者整个图像不包含Alpha通道）则读出来的位图的Alpha通道会被设置为最大值（即 255）
 UniformBitmap_p UB_CreateFromFile(const char *FilePath);
 
+int UB_SaveToFile_24(UniformBitmap_p UB, const char *FilePath);
+int UB_SaveToFile_32(UniformBitmap_p UB, const char *FilePath);
+
 // 释放位图资源
 void UB_Free(UniformBitmap_p *pUB);
 
