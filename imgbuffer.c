@@ -1,4 +1,5 @@
 #include"imgbuffer.h"
+#include<Windows.h>
 
 #include<stdlib.h>
 #include<string.h>
@@ -11,10 +12,27 @@ static size_t CalcAlign(size_t Size, size_t Align)
 ImgBuffer_p ImgBuffer_Create(uint32_t Width, uint32_t Height, size_t UnitSize, size_t RowAlign)
 {
 	size_t i;
-	uint8_t* Buffer;
-	ImgBuffer_p pBuf = NULL;
+	uint8_t* Buffer = NULL;
 
 	if (!Width || !Height || !UnitSize) return 0;
+	if (!RowAlign) RowAlign = 4;
+
+	i = CalcAlign(Width * UnitSize, RowAlign) * Height;
+	Buffer = malloc(i);
+	if (!Buffer) goto FailExit;
+
+	return ImgBuffer_CreateFromBuffer(Buffer, Width, Height, UnitSize, RowAlign, 1);
+FailExit:
+	free(Buffer);
+	return 0;
+}
+
+ImgBuffer_p ImgBuffer_CreateFromBuffer(void *Buffer, uint32_t Width, uint32_t Height, size_t UnitSize, size_t RowAlign, int OwnBuffer)
+{
+	size_t i;
+	ImgBuffer_p pBuf = NULL;
+
+	if (!Buffer || !Width || !Height || !UnitSize) return 0;
 	if (!RowAlign) RowAlign = 4;
 
 	pBuf = malloc(sizeof * pBuf);
@@ -28,17 +46,17 @@ ImgBuffer_p ImgBuffer_Create(uint32_t Width, uint32_t Height, size_t UnitSize, s
 	pBuf->Pitch = CalcAlign(Width * UnitSize, RowAlign);
 	pBuf->BufferSize = pBuf->Pitch * Height;
 
-	pBuf->Buffer = malloc(pBuf->BufferSize);
-	if (!pBuf->Buffer) goto FailExit;
+	pBuf->Buffer = Buffer;
 	pBuf->RowPointers = malloc(sizeof pBuf->RowPointers[0] * Height);
 	if (!pBuf->RowPointers) goto FailExit;
 
 	Buffer = pBuf->Buffer;
 	for (i = 0; i < Height; i++)
 	{
-		pBuf->RowPointers[i] = &Buffer[i * pBuf->Pitch];
+		pBuf->RowPointers[i] = &((uint8_t*)Buffer)[i * pBuf->Pitch];
 	}
 	memset(pBuf->Buffer, 0, pBuf->BufferSize);
+	pBuf->OwnBuffer = OwnBuffer;
 
 	return pBuf;
 FailExit:
@@ -69,10 +87,28 @@ ImgBuffer_p ImgBuffer_ConvertFromUniformBitmap(UniformBitmap_p *ppUB)
 	pBuf->BufferSize = pBuf->Pitch * pBuf->Height;
 	pBuf->Buffer = ppUB[0]->BitmapData;
 	pBuf->RowPointers = ppUB[0]->RowPointers;
+	pBuf->OwnBuffer = 1;
 
-	free(ppUB[0]);
-	ppUB[0] = NULL;
+	free(ppUB[0]); ppUB[0] = NULL;
 	return pBuf;
+}
+
+UniformBitmap_p ImgBuffer_ConvertToUniformBitmap(ImgBuffer_p *ppIB)
+{
+	UniformBitmap_p UB = NULL;
+
+	if (!ppIB || !ppIB[0]) return NULL;
+
+	UB = malloc(sizeof * UB);
+	if (!UB) return NULL;
+	memset(UB, 0, sizeof * UB);
+	UB->Width = ppIB[0]->Width;
+	UB->Height = ppIB[0]->Height;
+	UB->BitmapData = ppIB[0]->Buffer;
+	UB->RowPointers = (uint32_t**)ppIB[0]->RowPointers;
+
+	free(ppIB[0]); ppIB[0] = NULL;
+	return UB;
 }
 
 void ImgBuffer_Blt(ImgBuffer_p pDst, int x, int y, int w, int h, ImgBuffer_p pSrc, int src_x, int src_y)
@@ -131,6 +167,6 @@ void ImgBuffer_Destroy(ImgBuffer_p pBuf)
 	if (!pBuf) return;
 
 	free(pBuf->RowPointers);
-	free(pBuf->Buffer);
+	if (pBuf->OwnBuffer) free(pBuf->Buffer);
 	free(pBuf);
 }
