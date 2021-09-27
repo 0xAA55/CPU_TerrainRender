@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="crc3264.c" />
+    <ClCompile Include="dictcfg.c" />
     <ClCompile Include="imgbuffer.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="cpucan.c" />
@@ -29,6 +30,7 @@
   <ItemGroup>
     <ClInclude Include="cpucan.h" />
     <ClInclude Include="crc3264.h" />
+    <ClInclude Include="dictcfg.h" />
     <ClInclude Include="imgbuffer.h" />
     <ClInclude Include="terrain.h" />
     <ClInclude Include="unibmp.h" />
