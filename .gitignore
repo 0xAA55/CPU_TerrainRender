@@ -6,3 +6,5 @@
 intermediate/
 lib/
 out/
+maps/*/*.bin
+maps/*/*.bin.bmp
