@@ -44,6 +44,35 @@ FailExit:
 	return NULL;
 }
 
+CPUCan_p CPUCan_CreateWithRGBAFB(uint32_t Width, uint32_t Height, void *Address_RGBA_FB)
+{
+	CPUCan_p c = NULL;
+
+	if (!Width || !Height) return c;
+
+	c = malloc(sizeof * c);
+	if (!c) return c;
+	memset(c, 0, sizeof * c);
+
+	c->Textures = dict_create();
+	if (!c->Textures) goto FailExit;
+
+	dict_set_compare_func(c->Textures, CompFunc);
+	dict_set_on_delete_value(c->Textures, TexOnRemove);
+
+	c->ColorBuf = ImgBuffer_CreateFromBuffer(Address_RGBA_FB, Width, Height, 4, 4, 0);
+	c->DepthBuf = ImgBuffer_Create(Width, Height, 4, 4);
+	if (!c->ColorBuf || !c->DepthBuf) goto FailExit;
+
+	if (!CPUCan_CreateTexture(c, Width, Height, "ColorBuf")) goto FailExit;
+	if (!CPUCan_CreateTexture(c, Width, Height, "DepthBuf")) goto FailExit;
+
+	return c;
+FailExit:
+	CPUCan_Delete(c);
+	return NULL;
+}
+
 ImgBuffer_p CPUCan_GetTexture(CPUCan_p c, const char *name_of_texture)
 {
 	return dict_search(c->Textures, name_of_texture);

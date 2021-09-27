@@ -20,6 +20,7 @@ typedef struct CPUCan_struct
 
 
 CPUCan_p CPUCan_Create(uint32_t Width, uint32_t Height);
+CPUCan_p CPUCan_CreateWithRGBAFB(uint32_t Width, uint32_t Height, void *Address_RGBA_FB);
 void CPUCan_Delete(CPUCan_p c);
 
 int CPUCan_LoadTextureFromFile(CPUCan_p c, const char *path, const char *name_of_texture);
@@ -27,7 +28,6 @@ int CPUCan_CreateTexture(CPUCan_p c, uint32_t Width, uint32_t Height, const char
 ImgBuffer_p CPUCan_GetTexture(CPUCan_p c, const char *name_of_texture);
 int CPUCan_SetTexture(CPUCan_p c, const char *name_of_texture, ImgBuffer_p Texture);
 void CPUCan_DeleteTexture(CPUCan_p c, const char *name_of_texture);
-
 
 
 
