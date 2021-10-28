@@ -22,9 +22,11 @@
     <ClCompile Include="crc3264.c" />
     <ClCompile Include="dictcfg.c" />
     <ClCompile Include="imgbuffer.c" />
+    <ClCompile Include="logprintf.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="cpucan.c" />
-    <ClCompile Include="terrain.c" />
+    <ClCompile Include="raymap.c" />
+    <ClCompile Include="game.c" />
     <ClCompile Include="unibmp.c" />
   </ItemGroup>
   <ItemGroup>
@@ -32,7 +34,9 @@
     <ClInclude Include="crc3264.h" />
     <ClInclude Include="dictcfg.h" />
     <ClInclude Include="imgbuffer.h" />
-    <ClInclude Include="terrain.h" />
+    <ClInclude Include="logprintf.h" />
+    <ClInclude Include="raymap.h" />
+    <ClInclude Include="game.h" />
     <ClInclude Include="unibmp.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -131,7 +135,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>dictionary.lib;mathutil.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dictionary.lib;mathutil.lib;rttimer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)lib\msvc\$(PlatformTarget)_$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -155,7 +159,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>dictionary.lib;mathutil.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dictionary.lib;mathutil.lib;rttimer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)lib\msvc\$(PlatformTarget)_$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -175,7 +179,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>dictionary.lib;mathutil.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dictionary.lib;mathutil.lib;rttimer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)lib\msvc\$(PlatformTarget)_$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -199,7 +203,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>dictionary.lib;mathutil.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dictionary.lib;mathutil.lib;rttimer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)lib\msvc\$(PlatformTarget)_$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
