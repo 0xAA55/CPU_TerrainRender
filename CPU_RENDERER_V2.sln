@@ -5,6 +5,7 @@ VisualStudioVersion = 16.0.30523.141
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CPU_RENDERER_V2", "CPU_RENDERER_V2.vcxproj", "{83410728-ED54-408F-B7CD-56FA3FF9FDD0}"
 	ProjectSection(ProjectDependencies) = postProject
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF} = {EDA0E325-37D0-4737-A15B-C75C432BD9AF}
 		{F19DE39E-3A11-4D08-A39A-D331D23D04ED} = {F19DE39E-3A11-4D08-A39A-D331D23D04ED}
 		{93555DDC-DDF1-4020-9F03-0957F7BAF7B7} = {93555DDC-DDF1-4020-9F03-0957F7BAF7B7}
 	EndProjectSection
@@ -12,6 +13,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mathutil", "mathutil\msvc\mathutil.vcxproj", "{93555DDC-DDF1-4020-9F03-0957F7BAF7B7}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dictionary", "C_dict\msvc\dictionary.vcxproj", "{F19DE39E-3A11-4D08-A39A-D331D23D04ED}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rttimer", "rttimer\msvc\rttimer.vcxproj", "{EDA0E325-37D0-4737-A15B-C75C432BD9AF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -45,6 +48,14 @@ Global
 		{F19DE39E-3A11-4D08-A39A-D331D23D04ED}.Release|x64.Build.0 = Release|x64
 		{F19DE39E-3A11-4D08-A39A-D331D23D04ED}.Release|x86.ActiveCfg = Release|Win32
 		{F19DE39E-3A11-4D08-A39A-D331D23D04ED}.Release|x86.Build.0 = Release|Win32
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Debug|x64.ActiveCfg = Debug|x64
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Debug|x64.Build.0 = Debug|x64
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Debug|x86.ActiveCfg = Debug|Win32
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Debug|x86.Build.0 = Debug|Win32
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Release|x64.ActiveCfg = Release|x64
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Release|x64.Build.0 = Release|x64
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Release|x86.ActiveCfg = Release|Win32
+		{EDA0E325-37D0-4737-A15B-C75C432BD9AF}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
