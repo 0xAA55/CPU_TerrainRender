@@ -29,7 +29,7 @@ ImgBuffer_p CPUCan_GetTexture(CPUCan_p c, const char *name_of_texture);
 int CPUCan_SetTexture(CPUCan_p c, const char *name_of_texture, ImgBuffer_p Texture);
 void CPUCan_DeleteTexture(CPUCan_p c, const char *name_of_texture);
 
-
+uint32_t CPUCan_SampleTexture(ImgBuffer_p i, float x, float y);
 
 
 #endif

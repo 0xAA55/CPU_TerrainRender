@@ -4,6 +4,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<math.h>
 
 static int CompFunc(const void *key1, const void *key2)
 {
@@ -24,6 +25,9 @@ CPUCan_p CPUCan_Create(uint32_t Width, uint32_t Height)
 	c = malloc(sizeof * c);
 	if (!c) return c;
 	memset(c, 0, sizeof *c);
+
+	c->Width = Width;
+	c->Height = Height;
 
 	c->Textures = dict_create();
 	if (!c->Textures) goto FailExit;
@@ -53,6 +57,9 @@ CPUCan_p CPUCan_CreateWithRGBAFB(uint32_t Width, uint32_t Height, void *Address_
 	c = malloc(sizeof * c);
 	if (!c) return c;
 	memset(c, 0, sizeof * c);
+
+	c->Width = Width;
+	c->Height = Height;
 
 	c->Textures = dict_create();
 	if (!c->Textures) goto FailExit;
@@ -140,4 +147,23 @@ int CPUCan_CreateTexture(CPUCan_p c, uint32_t Width, uint32_t Height, const char
 FailExit:
 	ImgBuffer_Destroy(NewImg);
 	return 0;
+}
+
+uint32_t CPUCan_SampleTexture(ImgBuffer_p i, float x, float y)
+{
+	float fx = floorf(x);
+	float fy = floorf(y);
+	uint32_t ux = (uint32_t)fx;
+	uint32_t uy = (uint32_t)fy;
+	float sx = x - fx;
+	float sy = y - fy;
+	uint32_t c00 = ImgBuffer_FetchU32(i, (ux + 0) & (i->Width2N - 1), (uy + 0) & (i->Height2N - 1));
+	uint32_t c01 = ImgBuffer_FetchU32(i, (ux + 0) & (i->Width2N - 1), (uy + 1) & (i->Height2N - 1));
+	uint32_t c10 = ImgBuffer_FetchU32(i, (ux + 1) & (i->Width2N - 1), (uy + 0) & (i->Height2N - 1));
+	uint32_t c11 = ImgBuffer_FetchU32(i, (ux + 1) & (i->Width2N - 1), (uy + 1) & (i->Height2N - 1));
+
+	return ARGB_Lerp(
+		ARGB_Lerp(c00, c10, sx),
+		ARGB_Lerp(c01, c11, sx),
+		sy);
 }
