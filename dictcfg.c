@@ -1,23 +1,9 @@
-#include "dictcfg.h"
+#include"dictcfg.h"
+#include"logprintf.h"
 
 #include<ctype.h>
 #include<stdlib.h>
 #include<string.h>
-#include<time.h>
-#include<stdarg.h>
-
-void log_printf(FILE *fp, const char *Format, ...)
-{
-	char Buffer[64] = {0};
-	time_t t = time(NULL);
-	struct tm *hms = localtime(&t);
-	va_list ap;
-	va_start(ap, Format);
-	strftime(Buffer, sizeof Buffer, "[%H:%M:%S] ", hms);
-	fputs(Buffer, fp);
-	vfprintf(fp, Format, ap);
-	va_end(ap);
-}
 
 static void dictcfg_section_remove(void *value)
 {
@@ -184,4 +170,15 @@ double dictcfg_getfloat(dict_p section, const char *key, double def)
 	char *val = dict_search(section, key);
 	if (!val) return def;
 	return atof(val);
+}
+
+int dictcfg_getbool(dict_p section, const char *key, int def)
+{
+	char *val = dict_search(section, key);
+	if (!val) return def;
+	if (!stricmp(val, "yes")) return 1;
+	if (!stricmp(val, "true")) return 1;
+	if (!stricmp(val, "no")) return 0;
+	if (!stricmp(val, "false")) return 0;
+	return -1;
 }
