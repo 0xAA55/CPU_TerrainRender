@@ -90,7 +90,7 @@ static uint32_t ARGB(uint8_t R, uint8_t G, uint8_t B, uint8_t A)
 // 位图不可以是RLE压缩，但位图可以是带位域的位图、带调色板的索引颜色位图。
 // 被读入后的图像数据会被强制转换为：ARGB 格式，每通道 8 bit 位深，每个像素4字节，分别是：蓝，绿，红，Alpha
 // 如果整个图像的Alpha通道皆为0（或者整个图像不包含Alpha通道）则读出来的位图的Alpha通道会被设置为最大值（即 255）
-UniformBitmap_p UB_CreateFromFile(const char *FilePath)
+UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 {
 	BitmapFileHeader_t BMFH;
 	BitmapInfoHeader_t BMIF;
@@ -107,7 +107,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 	FILE *fp = fopen(FilePath, "rb");
 	if (!fp)
 	{
-		fprintf(stderr, "打不开文件：%s （%s）\n",
+		fprintf(log_fp, "打不开文件：%s （%s）\n",
 			FilePath, strerror(errno));
 		return NULL;
 	}
@@ -115,7 +115,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 	// 读取位图文件头
 	if (fread(&BMFH, sizeof BMFH, 1, fp) != 1)
 	{
-		fprintf(stderr, "读取位图文件 %s 的位图文件头失败：%s\n",
+		fprintf(log_fp, "读取位图文件 %s 的位图文件头失败：%s\n",
 			FilePath, strerror(errno));
 		goto FailExit;
 	}
@@ -123,21 +123,21 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 	// 判断头部字段是否合理
 	if (BMFH.bfType != 0x4D42 || !BMFH.bfOffbits)
 	{
-		fprintf(stderr, "这大概不是一个BMP位图文件。");
+		fprintf(log_fp, "这大概不是一个BMP位图文件。");
 		goto FailExit;
 	}
 
 	// 读取位图信息头
 	if (fread(&BMIF, sizeof BMIF, 1, fp) != 1)
 	{
-		fprintf(stderr, "读取位图文件 %s 的位图信息头失败：%s\n",
+		fprintf(log_fp, "读取位图文件 %s 的位图信息头失败：%s\n",
 			FilePath, strerror(errno));
 		goto FailExit;
 	}
 
 	if (!BMIF.biPlanes || !BMIF.biWidth || !BMIF.biHeight)
 	{
-		fprintf(stderr, "位图文件 %s 的位图信息头的内容不合理。\n", FilePath);
+		fprintf(log_fp, "位图文件 %s 的位图信息头的内容不合理。\n", FilePath);
 		goto FailExit;
 	}
 
@@ -148,14 +148,14 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 		// 有位域，读取位域信息
 		if (fread(&Bitfields, sizeof Bitfields, 1, fp) != 1)
 		{
-			fprintf(stderr, "读取位图文件 %s 的位域信息失败：%s\n",
+			fprintf(log_fp, "读取位图文件 %s 的位域信息失败：%s\n",
 				FilePath, strerror(errno));
 			goto FailExit;
 		}
 		break;
 	case BI_RLE4:
 	case BI_RLE8:
-		fprintf(stderr, "位图文件 %s 使用了RLE压缩。暂不支持RLE压缩的位图，懒得弄。\n", FilePath);
+		fprintf(log_fp, "位图文件 %s 使用了RLE压缩。暂不支持RLE压缩的位图，懒得弄。\n", FilePath);
 		goto FailExit;
 	case BI_RGB:
 		// 没有位域，但是有调色板，读取调色板信息
@@ -166,7 +166,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 			else PaletteColorCount = (1u << BMIF.biBitCount);
 			if (fread(&Palette, 4, PaletteColorCount, fp) != PaletteColorCount)
 			{
-				fprintf(stderr, "读取位图文件 %s 的调色板信息失败：%s\n",
+				fprintf(log_fp, "读取位图文件 %s 的调色板信息失败：%s\n",
 					FilePath, strerror(errno));
 				goto FailExit;
 			}
@@ -197,12 +197,12 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 			Bitfields[2] = 0x0000ff;
 			break;
 		default:
-			fprintf(stderr, "位图文件 %s 的位图信息头的内容不合理：颜色位数是 %d。\n", FilePath, (int)BMIF.biBitCount);
+			fprintf(log_fp, "位图文件 %s 的位图信息头的内容不合理：颜色位数是 %d。\n", FilePath, (int)BMIF.biBitCount);
 			goto FailExit;
 		}
 		break;
 	default:
-		fprintf(stderr, "位图文件 %s 的位图信息头的内容不合理。\n", FilePath);
+		fprintf(log_fp, "位图文件 %s 的位图信息头的内容不合理。\n", FilePath);
 		goto FailExit;
 	}
 
@@ -278,7 +278,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 			for (y = 0; y < UB->Height; y++)
 			{
 				uint32_t PixelsPerBytes = 8 / BMIF.biBitCount;
-				uint8_t LastByte;
+				uint8_t LastByte = 0;
 				uint32_t BytePosition = 0;
 				uint32_t PalIndex;
 				uint32_t PixelsRemainLastByte = 0;
@@ -337,16 +337,16 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 				}
 				for (x = 0; x < UB->Width; x++)
 				{
-					uint32_t PixelData = *(uint16_t *)ReadInLineBuffer[x * 2];
+					uint32_t PixelData = ((uint16_t *)ReadInLineBuffer)[x * 2];
 					uint32_t R5 = (PixelData & 0x7c00) >> 10;
 					uint32_t G5 = (PixelData & 0x03e0) >> 5;
 					uint32_t B5 = (PixelData & 0x001f) >> 0;
 
 					Row[x] = ARGB(
-						(R5 << 3) | (R5 >> 2),
-						(G5 << 3) | (G5 >> 2),
-						(B5 << 3) | (B5 >> 2),
-						PixelData & 0x8000 ? (HasAlpha = 1) * 255 : 0);
+						(uint8_t)((R5 << 3) | (R5 >> 2)),
+						(uint8_t)((G5 << 3) | (G5 >> 2)),
+						(uint8_t)((B5 << 3) | (B5 >> 2)),
+						(uint8_t)(PixelData & 0x8000 ? (HasAlpha = 1) * 255 : 0));
 				}
 			}
 			if (!HasAlpha)
@@ -429,7 +429,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 
 		if (!BytesPerPixels)
 		{
-			fprintf(stderr, "包含位域信息的位图的每像素位数应当超过8。\n");
+			fprintf(log_fp, "包含位域信息的位图的每像素位数应当超过8。\n");
 			goto FailExit;
 		}
 
@@ -446,10 +446,10 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 			{
 				// 将一个像素的全部数据读入，再拆出其红绿蓝各个通道的颜色值
 				uint32_t PixelData = *(uint32_t *)PixelPointer;
-				uint32_t RV = (Bitfields[0]) >> RShift;
-				uint32_t GV = (Bitfields[1]) >> GShift;
-				uint32_t BV = (Bitfields[2]) >> BShift;
-				uint32_t AV = (Bitfield_A) >> AShift;
+				uint32_t RV = PixelData & ((Bitfields[0]) >> RShift);
+				uint32_t GV = PixelData & ((Bitfields[1]) >> GShift);
+				uint32_t BV = PixelData & ((Bitfields[2]) >> BShift);
+				uint32_t AV = PixelData & ((Bitfield_A) >> AShift);
 				uint32_t RBC = RBitCount;
 				uint32_t GBC = GBitCount;
 				uint32_t BBC = BBitCount;
@@ -461,14 +461,14 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath)
 				if (BBC) while (BBC < 8) { BV |= BV >> BBC; BBC *= 2; } else BV = 255;
 				if (ABC) while (ABC < 8) { AV |= AV >> ABC; ABC *= 2; } else AV = 255;
 
-				Row[x] = ARGB(RBC, GBC, BBC, ABC);
+				Row[x] = ARGB((uint8_t)RBC, (uint8_t)GBC, (uint8_t)BBC, (uint8_t)ABC);
 			}
 		}
 		break;
 	}
 
 	default:
-		fprintf(stderr, "既非位域格式又非RGB格式，停止解析。\n");
+		fprintf(log_fp, "既非位域格式又非RGB格式，停止解析。\n");
 		goto FailExit;
 	}
 
