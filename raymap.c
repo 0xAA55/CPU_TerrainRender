@@ -656,6 +656,23 @@ float RayMap_GetK(RayMap_p r, float x, float y)
 		sy);
 }
 
+vec4_t RayMap_GetNormal(RayMap_p r, int x, int y, float scale)
+{
+	float
+		ScaledXM = (float)((x - 1) * scale),
+		ScaledX0 = (float)(x * scale),
+		ScaledXP = (float)((x + 1) * scale),
+		ScaledYM = (float)((y - 1) * scale),
+		ScaledY0 = (float)(y * scale),
+		ScaledYP = (float)((y + 1) * scale);
+	float
+		x_diff = RayMap_GetAltitude(r, ScaledXM, ScaledY0) - RayMap_GetAltitude(r, ScaledXP, ScaledY0),
+		z_diff = RayMap_GetAltitude(r, ScaledX0, ScaledYM) - RayMap_GetAltitude(r, ScaledX0, ScaledYP);
+	vec4_t normal = vec4(x_diff, 2.0f, z_diff, 0);
+	normal = vec4_normalize(normal);
+	return normal;
+}
+
 int RayMap_Raycast(RayMap_p r, vec4_t RayOrig, vec4_t RayDir, int IterCount, vec4_p Out_CastPoint, float *Out_CastDist, float MaxDist)
 {
 	real_t Ray_HorZ, CastDist, RayK;

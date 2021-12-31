@@ -21,6 +21,7 @@ RayMap_p RayMap_CreateFromAltitude(ImgBuffer_p Altitude, char *AssetsDirectory, 
 void RayMap_Unload(RayMap_p r);
 float RayMap_GetAltitude(RayMap_p r, float x, float y);
 float RayMap_GetK(RayMap_p r, float x, float y);
+vec4_t RayMap_GetNormal(RayMap_p r, int x, int y, float scale);
 int RayMap_Raycast(RayMap_p r, vec4_t RayOrig, vec4_t RayDir, int IterCount, vec4_p Out_CastPoint, float *Out_CastDist, float MaxDist);
 
 
