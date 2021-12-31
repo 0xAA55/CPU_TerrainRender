@@ -52,46 +52,81 @@ static uint32_t ParseColorRGB(char *r_comma_g_comma_b_comma)
 	return ARGBSafe(r, g, b, 255);
 }
 
-static int GetAlbedo(Game_p t, dict_p d_landview, FILE *fp_log, const char *path)
+static int GetAlbedo(Game_p g, dict_p d_landview, FILE *fp_log, const char *path)
 {
-	if (!CPUCan_LoadTextureFromFile(t->CPUCan, path, Name_Game_Albedo))
+	if (!CPUCan_LoadTextureFromFile(g->CPUCan, path, Name_Game_Albedo))
 	{
 		log_printf(fp_log, "Could not load '%s'.\n", path);
 		return 0;
 	}
-	t->Albedo = CPUCan_GetTexture(t->CPUCan, Name_Game_Albedo);
-	if (!t->Albedo)
+	g->Albedo = CPUCan_GetTexture(g->CPUCan, Name_Game_Albedo);
+	if (!g->Albedo)
 	{
 		log_printf(fp_log, "Could not get texture '%s'.\n", Name_Game_Albedo);
 		return 0;
 	}
-	if (!ImgBuffer_To2N(t->Albedo, RGBAGrowInterpolate, RGBAShrinkToPixel))
+	if (!ImgBuffer_To2N(g->Albedo, RGBAGrowInterpolate, RGBAShrinkToPixel))
 	{
 		log_printf(fp_log, "Could not interpolate texture '%s' size to 2^N, use scissored texture.\n", Name_Game_Albedo);
 	}
 	return 1;
 }
 
-static int LoadCfg(Game_p t, dict_p Config)
+static vec4_t parse_vector(const char *str_vector)
 {
+	double x = 0, y = 0, z = 0, w = 1;
+	int parsed = sscanf(str_vector, "%lf,%lf,%lf,%lf", &x, &y, &z, &w);
+	return vec4((real_t)x, (real_t)y, (real_t)z, (real_t)w);
+}
+
+static int LoadCfg(Game_p g, dict_p Config)
+{
+	dict_p d_general = NULL;
 	dict_p d_player = NULL;
 	dict_p d_input = NULL;
 	dict_p d_render = NULL;
 	dict_p d_profile = NULL;
-	FILE *fp_log = t->fp_log;
+	FILE *fp_log = g->fp_log;
 
-	d_player = dictcfg_section(Config, "[player]");
-	t->Player_Height = (float)dictcfg_getfloat(d_input, "height", 170.0);
-	t->Player_Size = (float)dictcfg_getfloat(d_input, "size", 30.0);
-
-	d_input = dictcfg_section(Config, "[input]");
+	d_general = dictcfg_section(Config, "[general]");
 	/*
-	if (!input)
+	if (!d_general)
 	{
 		log_printf(fp_log, "'[input]' section not defined in 'config.cfg' file.\n");
 		goto FailExit;
 	}*/
-	t->Sensitivity = (float)dictcfg_getfloat(d_input, "sensitivity", 1.0);
+	g->Gravity = parse_vector(dictcfg_getstr( d_general, "default_gravity", "0,-9,0"));
+
+	d_player = dictcfg_section(Config, "[player]");
+	/*
+	if (!d_player)
+	{
+		log_printf(fp_log, "'[input]' section not defined in 'config.cfg' file.\n");
+		goto FailExit;
+	}*/
+	g->Player_Size = (float)dictcfg_getfloat(d_player, "size", 30.0);
+	g->Player_Height = (float)dictcfg_getfloat(d_player, "height", 165.0) * 0.5f;
+	g->Player_MinHeight = (float)dictcfg_getfloat(d_player, "min_height", 60.0) * 0.5f;
+	g->Player_MaxHeight = (float)dictcfg_getfloat(d_player, "max_height", 175.0) * 0.5f;
+	g->Player_CrouchHeight = (float)dictcfg_getfloat(d_player, "crouch_height", 80.0) * 0.5f;
+	g->Player_StandingDamp = (float)dictcfg_getfloat(d_player, "standing_damp", 0.05);
+	g->Player_Speed = (float)dictcfg_getfloat(d_player, "speed", 1000.0);
+	g->Player_Accel = (float)dictcfg_getfloat(d_player, "accel", 1000.0);
+	g->Player_Jump = (float)dictcfg_getfloat(d_player, "jump", 200.0);
+	g->Player_Friction = (float)dictcfg_getfloat(d_player, "friction", 100.0);
+	g->Player_FlyingSpeed = (float)dictcfg_getfloat(d_player, "flying_speed", 100.0);
+	g->Player_SpeedDamp = (float)dictcfg_getfloat(d_player, "speed_damp", 0.9);
+	g->Player_BobbingRate = (float)dictcfg_getfloat(d_player, "bobbing_rate", 0.001);
+	g->Player_BobbingAmplitude = (float)dictcfg_getfloat(d_player, "bobbing_amplitude", 5) * 0.5f;
+
+	d_input = dictcfg_section(Config, "[input]");
+	/*
+	if (!d_input)
+	{
+		log_printf(fp_log, "'[input]' section not defined in 'config.cfg' file.\n");
+		goto FailExit;
+	}*/
+	g->Sensitivity = (float)dictcfg_getfloat(d_input, "sensitivity", 1.0);
 
 	d_profile = dictcfg_section(Config, "[profile]");
 	/*
@@ -100,10 +135,10 @@ static int LoadCfg(Game_p t, dict_p Config)
 		log_printf(fp_log, "'[profile]' section not defined in 'config.cfg' file.\n");
 		goto FailExit;
 	}*/
-	t->profile_task_per_line = dictcfg_getint(d_profile, "task_per_line", 1);
-	t->profile_task_per_pixel = dictcfg_getint(d_profile, "task_per_pixel", !t->profile_task_per_line);
-	if ((t->profile_task_per_line && t->profile_task_per_pixel) ||
-		(!t->profile_task_per_line && !t->profile_task_per_pixel))
+	g->profile_task_per_line = dictcfg_getint(d_profile, "task_per_line", 1);
+	g->profile_task_per_pixel = dictcfg_getint(d_profile, "task_per_pixel", !g->profile_task_per_line);
+	if ((g->profile_task_per_line && g->profile_task_per_pixel) ||
+		(!g->profile_task_per_line && !g->profile_task_per_pixel))
 	{
 		log_printf(fp_log, "In '[profile]' section: bad config: both 'task_per_line' and 'task_per_pixel' was set to the same boolean value (zero or non-zero).\n");
 		goto FailExit;
@@ -116,17 +151,17 @@ static int LoadCfg(Game_p t, dict_p Config)
 		log_printf(fp_log, "'[render]' section not defined in 'config.cfg' file.\n");
 		goto FailExit;
 	}*/
-	t->x_res = dictcfg_getint(d_render, "x_res", t->CPUCan->Width);
-	t->y_res = dictcfg_getint(d_render, "y_res", t->CPUCan->Height);
-	t->interleave = dictcfg_getint(d_render, "interleave", 0);
-	t->x_scale = dictcfg_getint(d_render, "x_scale", 4);
-	t->y_scale = dictcfg_getint(d_render, "y_scale", 1);
-	t->interpolate = dictcfg_getint(d_render, "interpolate", 1);
-	t->skycolor1 = ParseColorRGB(dictcfg_getstr(d_render, "skycolor1", "96,96,200"));
-	t->skycolor2 = ParseColorRGB(dictcfg_getstr(d_render, "skycolor1", "200,210,220"));
+	g->XRes = dictcfg_getint(d_render, "x_res", g->CPUCan->Width);
+	g->YRes = dictcfg_getint(d_render, "y_res", g->CPUCan->Height);
+	g->Interleave = dictcfg_getint(d_render, "interleave", 0);
+	g->XScaling = dictcfg_getint(d_render, "x_scale", 4);
+	g->YScaling = dictcfg_getint(d_render, "y_scale", 1);
+	g->Interpolate = dictcfg_getint(d_render, "interpolate", 1);
+	g->Skycolor1 = ParseColorRGB(dictcfg_getstr(d_render, "skycolor1", "96,96,200"));
+	g->Skycolor2 = ParseColorRGB(dictcfg_getstr(d_render, "skycolor2", "200,210,220"));
 
-	t->LandView = ImgBuffer_Create(t->x_res / t->x_scale, t->y_res / t->y_scale, 4, 4);
-	if (!t->LandView)
+	g->LandView = ImgBuffer_Create(g->XRes / g->XScaling, g->YRes / g->YScaling, 4, 4);
+	if (!g->LandView)
 	{
 		log_printf(fp_log, "Create landview buffer failed.\n");
 		goto FailExit;
@@ -137,36 +172,36 @@ FailExit:
 	return 0;
 }
 
-static uint32_t Map_FetchAlbedo(Game_p t, int x, int y)
+static uint32_t Map_FetchAlbedo(Game_p g, int x, int y)
 {
-	int xm = t->Albedo->Width2N - 1;
-	int ym = t->Albedo->Height2N - 1;
-	return ImgBuffer_FetchU32(t->Albedo, x & xm, y & ym);
+	int xm = g->Albedo->Width2N - 1;
+	int ym = g->Albedo->Height2N - 1;
+	return ImgBuffer_FetchU32(g->Albedo, x & xm, y & ym);
 }
 
-static uint32_t Map_GetAlbedo(Game_p t, float x, float y)
+static uint32_t Map_GetAlbedo(Game_p g, float x, float y)
 {
-	x /= (float)t->AlbedoScale;
-	y /= (float)t->AlbedoScale;
-	if (t->interpolate)
-		return CPUCan_SampleTexture(t->Albedo, x, y);
+	x /= (float)g->AlbedoScale;
+	y /= (float)g->AlbedoScale;
+	if (g->Interpolate)
+		return CPUCan_SampleTexture(g->Albedo, x, y);
 	else
 	{
 		real_t fx = r_floor(x);
 		real_t fy = r_floor(y);
 		uint32_t ux = (uint32_t)fx;
 		uint32_t uy = (uint32_t)fy;
-		uint32_t uw = t->Albedo->Width2N;
-		uint32_t uh = t->Albedo->Height2N;
-		return ImgBuffer_FetchU32(t->Albedo, ux & (uw - 1), uy & (uh - 1));
+		uint32_t uw = g->Albedo->Width2N;
+		uint32_t uh = g->Albedo->Height2N;
+		return ImgBuffer_FetchU32(g->Albedo, ux & (uw - 1), uy & (uh - 1));
 	}
 }
 
-static void PreRenderLighting(Game_p t)
+static void PreRenderLighting(Game_p g)
 {
 	ptrdiff_t i, w, h, c, xm, ys;
-	w = t->Albedo->Width2N;
-	h = t->Albedo->Height2N;
+	w = g->Albedo->Width2N;
+	h = g->Albedo->Height2N;
 	c = (ptrdiff_t)w * h;
 	xm = w - 1;
 
@@ -179,13 +214,6 @@ static void PreRenderLighting(Game_p t)
 	{
 		int x = (int)(i & xm),
 			y = (int)(i >> ys);
-		float
-			ScaledXM = (float)((x - 1) * t->AlbedoScale),
-			ScaledX0 = (float)(x * t->AlbedoScale),
-			ScaledXP = (float)((x + 1) * t->AlbedoScale),
-			ScaledYM = (float)((y - 1) * t->AlbedoScale),
-			ScaledY0 = (float)(y * t->AlbedoScale),
-			ScaledYP = (float)((y + 1) * t->AlbedoScale);
 
 		union ColorARGB
 		{
@@ -193,21 +221,16 @@ static void PreRenderLighting(Game_p t)
 			uint32_t u32;
 		}Pixel;
 
-		float x_diff, z_diff;
 		float rx, gx, bx;
 		vec4_t normal;
 
-		x_diff = RayMap_GetAltitude(t->RayMap, ScaledXM, ScaledY0) - RayMap_GetAltitude(t->RayMap, ScaledXP, ScaledY0);
-		z_diff = RayMap_GetAltitude(t->RayMap, ScaledX0, ScaledYM) - RayMap_GetAltitude(t->RayMap, ScaledX0, ScaledYP);
-		normal = vec4(x_diff, 2.0f, z_diff, 0);
-		normal = vec4_normalize(normal);
-		normal = vec4_flushcomp(normal);
+		normal = RayMap_GetNormal(g->RayMap, x, y, (float)g->AlbedoScale);
 
-		Pixel.u32 = ImgBuffer_FetchU32(t->Albedo, x, y);
+		Pixel.u32 = ImgBuffer_FetchU32(g->Albedo, x, y);
 		bx = (float)Pixel.u8[0] * normal.y;
 		gx = (float)Pixel.u8[1] * normal.y;
 		rx = (float)Pixel.u8[2] * normal.y;
-		ImgBuffer_FetchU32(t->Albedo, x, y) = ARGBSafe((int32_t)rx, (int32_t)gx, (int32_t)bx, 255);
+		ImgBuffer_FetchU32(g->Albedo, x, y) = ARGBSafe((int32_t)rx, (int32_t)gx, (int32_t)bx, 255);
 	}
 }
 
@@ -279,10 +302,10 @@ static RayMap_p CreateWalkMap(ImgBuffer_p Altitude, char *AssetsDirectory, char 
 		}
 
 #pragma omp parallel for
-		for (y = 0; y < WalkAlt->Height2N; y++)
+		for (y = 0; y < (int)WalkAlt->Height2N; y++)
 		{
 			int x;
-			for (x = 0; x < WalkAlt->Width2N; x++)
+			for (x = 0; x < (int)WalkAlt->Width2N; x++)
 			{
 				float highest = 0;
 
@@ -327,24 +350,23 @@ FailExit:
 	}
 }
 
-static int LoadWalkMap(Game_p t, char *AssetsDirectory, char *WalkAltitudeMap, char *WalkKFile, int WalkerRadius, FILE *fp_log)
+static int LoadWalkMap(Game_p g, char *AssetsDirectory, char *WalkAltitudeMap, char *WalkKFile, int WalkerRadius, FILE *fp_log)
 {
-	t->WalkMap = RayMap_Load(AssetsDirectory, WalkAltitudeMap, WalkKFile, fp_log);
-	if (t->WalkMap) return 1;
+	g->WalkMap = RayMap_Load(AssetsDirectory, WalkAltitudeMap, WalkKFile, fp_log);
+	if (g->WalkMap) return 1;
 
-	t->WalkMap = CreateWalkMap(t->RayMap->Altitude, AssetsDirectory, WalkAltitudeMap, WalkKFile, WalkerRadius, fp_log);
-	if (!t->WalkMap) return 0;
+	g->WalkMap = CreateWalkMap(g->RayMap->Altitude, AssetsDirectory, WalkAltitudeMap, WalkKFile, WalkerRadius, fp_log);
+	if (!g->WalkMap) return 0;
 
 	return 1;
-FailExit:
-	return 0;
 }
 
-static int LoadMap(Game_p t, const char *MapDir)
+static int LoadMap(Game_p g, const char *MapDir)
 {
 	char StrBuf[1024];
 	dict_p d_landview = NULL;
-	FILE *fp_log = t->fp_log;
+	FILE *fp_log = g->fp_log;
+	char *found = NULL;
 	dict_p MapCfg = NULL;
 
 	snprintf(StrBuf, sizeof StrBuf, "%s\\meta.ini", MapDir);
@@ -359,28 +381,31 @@ static int LoadMap(Game_p t, const char *MapDir)
 	}
 
 	snprintf(StrBuf, sizeof StrBuf, "%s\\%s", MapDir, dictcfg_getstr(d_landview, "albedo", "albedo.bmp"));
-	if (!GetAlbedo(t, d_landview, fp_log, StrBuf)) goto FailExit;
+	if (!GetAlbedo(g, d_landview, fp_log, StrBuf)) goto FailExit;
 
-	t->AlbedoScale = dictcfg_getfloat(d_landview, "albedo_scale", 1);
-	t->AltitudeScale = dictcfg_getfloat(d_landview, "altitude_scale", 1);
+	g->AlbedoScale = dictcfg_getfloat(d_landview, "albedo_scale", 1);
+	g->AltitudeScale = dictcfg_getfloat(d_landview, "altitude_scale", 1);
 
-	t->RayMap = RayMap_LoadFromRaw(MapDir,
+	g->RayMap = RayMap_LoadFromRaw((char*)MapDir,
 		dictcfg_getstr(d_landview, "altitude", "altitude.bin"),
 		dictcfg_getstr(d_landview, "raw_altitude", "altitude.bmp"),
 		dictcfg_getstr(d_landview, "k", "k.bin"),
 		dictcfg_getint(d_landview, "raw_altitude_blur", 0),
 		fp_log);
-	if (!t->RayMap) goto FailExit;
-	if (!LoadWalkMap(t, MapDir,
+	if (!g->RayMap) goto FailExit;
+	if (!LoadWalkMap(g, MapDir,
 		dictcfg_getstr(d_landview, "walk_altitude", "walk_altitude.bin"),
 		dictcfg_getstr(d_landview, "walk_k", "walk_k.bin"),
-		t->Player_Size,
+		g->Player_Size,
 		fp_log)) goto FailExit;
 
-	PreRenderLighting(t);
+	PreRenderLighting(g);
 
-	t->RenderDist = (float)dictcfg_getfloat(d_landview, "render_dist", 256);
-	t->IterCount = dictcfg_getint(d_landview, "iter_count", 64);
+	g->RenderDist = (float)dictcfg_getfloat(d_landview, "render_dist", 256);
+	g->IterCount = dictcfg_getint(d_landview, "iter_count", 64);
+
+	found = dict_search(d_landview, "gravity");
+	if (found) g->Gravity = parse_vector(found);
 
 	dict_delete(MapCfg);
 	return 1;
@@ -393,49 +418,49 @@ FailExit:
 Game_p Game_Create(CPUCan_p CPUCan, const char *WorkDir, const char *MapDir, dict_p Config)
 {
 	char StrBuf[1024];
-	Game_p t = NULL;
+	Game_p g = NULL;
 	FILE *fp_log = NULL;
 
-	if (!CPUCan || !WorkDir || !MapDir) return t;
+	if (!CPUCan || !WorkDir || !MapDir) return g;
 
 	snprintf(StrBuf, sizeof StrBuf, "%s\\terrain.log", WorkDir);
 	fp_log = fopen(StrBuf, "a");
 	if (!fp_log) goto FailExit;
 
-	t = malloc(sizeof t[0]);
-	if (!t) goto FailExit;
-	memset(t, 0, sizeof t[0]);
+	g = malloc(sizeof g[0]);
+	if (!g) goto FailExit;
+	memset(g, 0, sizeof g[0]);
 
-	t->CPUCan = CPUCan;
-	t->fp_log = fp_log;
+	g->CPUCan = CPUCan;
+	g->fp_log = fp_log;
 
-	if (!LoadCfg(t, Config)) goto FailExit;
-	if (!LoadMap(t, MapDir)) goto FailExit;
+	if (!LoadCfg(g, Config)) goto FailExit;
+	if (!LoadMap(g, MapDir)) goto FailExit;
 
-	t->Aspect = (float)CPUCan->Width / CPUCan->Height;
+	g->Aspect = (float)CPUCan->Width / CPUCan->Height;
 
 	fclose(fp_log);
-	return t;
+	return g;
 FailExit:
 	if (fp_log) fclose(fp_log);
-	Game_Free(t);
+	Game_Free(g);
 	return NULL;
 }
 
-void Game_SetCamera(Game_p t, vec4_t CamPos, mat4_t CamRotMat, float FOV)
+void Game_SetCamera(Game_p g, vec4_t CamPos, mat4_t CamRotMat, float FOV)
 {
-	t->CameraPos = CamPos;
-	t->CamRotMat = CamRotMat;
-	t->FOV = FOV;
+	g->CameraPos = CamPos;
+	g->CamRotMat = CamRotMat;
+	g->FOV = FOV;
 }
 
-float Game_GetAltitude(Game_p t, float x, float z)
+float Game_GetAltitude(Game_p g, float x, float z)
 {
-	if (!t) return 0;
-	return RayMap_GetAltitude(t->RayMap, x, z);
+	if (!g) return 0;
+	return RayMap_GetAltitude(g->RayMap, x, z);
 }
 
-static void RenderPixel(Game_p t, float RayXScale, float RayYScale, uint32_t x, uint32_t y)
+static void RenderPixel(Game_p g, float RayXScale, float RayYScale, uint32_t x, uint32_t y)
 {
 	vec4_t RayDir;
 	vec4_t CastPoint;
@@ -443,40 +468,40 @@ static void RenderPixel(Game_p t, float RayXScale, float RayYScale, uint32_t x, 
 	uint32_t Color = 0;
 
 	RayDir = vec4(
-		((float)x / t->LandView->Width - 0.5f) * RayXScale,
-		-((float)y / t->LandView->Height - 0.5f) * RayYScale, 1, 0);
+		((float)x / g->LandView->Width - 0.5f) * RayXScale,
+		-((float)y / g->LandView->Height - 0.5f) * RayYScale, 1, 0);
 	RayDir = vec4_normalize(RayDir);
-	RayDir = vec4_mul_mat4(RayDir, t->CamRotMat);
+	RayDir = vec4_mul_mat4(RayDir, g->CamRotMat);
 	RayDir = vec4_flushcomp(RayDir);
 
-	if (RayMap_Raycast(t->RayMap, t->CameraPos, RayDir, t->IterCount, &CastPoint, &CastDist, t->RenderDist))
+	if (RayMap_Raycast(g->RayMap, g->CameraPos, RayDir, g->IterCount, &CastPoint, &CastDist, g->RenderDist))
 	{
-		Color = ARGB_Lerp(Map_GetAlbedo(t, CastPoint.x, CastPoint.z),
-			t->skycolor2, CastDist / t->RenderDist);
+		Color = ARGB_Lerp(Map_GetAlbedo(g, CastPoint.x, CastPoint.z),
+			g->Skycolor2, CastDist / g->RenderDist);
 	}
 	else
 	{
-		Color = ARGB_Lerp(t->skycolor2, t->skycolor1, r_abs(RayDir.y));
+		Color = ARGB_Lerp(g->Skycolor2, g->Skycolor1, r_abs(RayDir.y));
 	}
 
-	ImgBuffer_FetchU32(t->LandView, x, y) = Color;
+	ImgBuffer_FetchU32(g->LandView, x, y) = Color;
 }
 
-static void RenderTaskedPerPixel(Game_p t)
+static void RenderTaskedPerPixel(Game_p g)
 {
 	ptrdiff_t i;
 	ptrdiff_t PixelCount;
 	size_t w, h;
 	float RayXScale, RayYScale;
 	ImgBuffer_p ColorBuf;
-	float FOV_Scale = r_sin(t->FOV * 0.5f);
+	float FOV_Scale = r_sin(g->FOV * 0.5f);
 
-	ColorBuf = t->CPUCan->ColorBuf;
-	w = t->LandView->Width;
-	h = t->LandView->Height;
+	ColorBuf = g->CPUCan->ColorBuf;
+	w = g->LandView->Width;
+	h = g->LandView->Height;
 	PixelCount = (ptrdiff_t)(w * h);
 
-	RayXScale = t->Aspect * FOV_Scale;
+	RayXScale = g->Aspect * FOV_Scale;
 	RayYScale = FOV_Scale;
 
 #pragma omp parallel for
@@ -486,13 +511,13 @@ static void RenderTaskedPerPixel(Game_p t)
 		x = (uint32_t)(i % w);
 		y = (uint32_t)(i / w);
 
-		if (t->interleave)
+		if (g->Interleave)
 		{
-			if (((x & 1) ^ (y & 1)) == (t->FrameCounter & 1))
+			if (((x & 1) ^ (y & 1)) == (g->FrameCounter & 1))
 				continue;
 		}
 
-		RenderPixel(t, RayXScale, RayYScale, x, y);
+		RenderPixel(g, RayXScale, RayYScale, x, y);
 	}
 
 	w = ColorBuf->Width;
@@ -504,25 +529,25 @@ static void RenderTaskedPerPixel(Game_p t)
 		size_t x, y, sx, sy;
 		x = (size_t)i % w;
 		y = (size_t)i / w;
-		sx = x / t->x_scale;
-		sy = y / t->y_scale;
-		ImgBuffer_FetchU32(ColorBuf, x, y) = ImgBuffer_FetchU32(t->LandView, sx, sy);
+		sx = x / g->XScaling;
+		sy = y / g->YScaling;
+		ImgBuffer_FetchU32(ColorBuf, x, y) = ImgBuffer_FetchU32(g->LandView, sx, sy);
 	}
 }
 
-static void RenderTaskedPerLine(Game_p t)
+static void RenderTaskedPerLine(Game_p g)
 {
 	ptrdiff_t y;
 	size_t w, h;
 	float RayXScale, RayYScale;
 	ImgBuffer_p ColorBuf;
-	float FOV_Scale = r_sin(t->FOV * 0.5f);
+	float FOV_Scale = r_sin(g->FOV * 0.5f);
 
-	ColorBuf = t->CPUCan->ColorBuf;
-	w = t->LandView->Width;
-	h = t->LandView->Height;
+	ColorBuf = g->CPUCan->ColorBuf;
+	w = g->LandView->Width;
+	h = g->LandView->Height;
 
-	RayXScale = t->Aspect * FOV_Scale;
+	RayXScale = g->Aspect * FOV_Scale;
 	RayYScale = FOV_Scale;
 
 #pragma omp parallel for
@@ -531,13 +556,13 @@ static void RenderTaskedPerLine(Game_p t)
 		ptrdiff_t x;
 		for (x = 0; x < (int32_t)w; x++)
 		{
-			if (t->interleave)
+			if (g->Interleave)
 			{
-				if (((x & 1) ^ (y & 1)) == (t->FrameCounter & 1))
+				if (((x & 1) ^ (y & 1)) == (g->FrameCounter & 1))
 					continue;
 			}
 
-			RenderPixel(t, RayXScale, RayYScale, (uint32_t)x, (uint32_t)y);
+			RenderPixel(g, RayXScale, RayYScale, (uint32_t)x, (uint32_t)y);
 		}
 	}
 
@@ -550,66 +575,195 @@ static void RenderTaskedPerLine(Game_p t)
 		for (x = 0; x < (int32_t)w; x++)
 		{
 			ptrdiff_t sx, sy;
-			sx = x / t->x_scale;
-			sy = y / t->y_scale;
-			ImgBuffer_FetchU32(ColorBuf, x, y) = ImgBuffer_FetchU32(t->LandView, sx, sy);
+			sx = x / g->XScaling;
+			sy = y / g->YScaling;
+			ImgBuffer_FetchU32(ColorBuf, x, y) = ImgBuffer_FetchU32(g->LandView, sx, sy);
 		}
 	}
 }
 
-void Game_KBDInput(Game_p t, Game_Input_t key, int status)
+void Game_KBDInput(Game_p g, Game_Input_t key, int status)
 {
-	if (!t) return;
+	if (!g) return;
 
-	t->KBD_Status[key] = status;
+	g->KBD_Status[key] = status;
 }
 
-void Game_FPSInput(Game_p t, int delta_x, int delta_y)
+void Game_FPSInput(Game_p g, int delta_x, int delta_y)
 {
 	const float HalfPi = r_pi * 0.5f;
-	if (!t) return;
+	if (!g) return;
 
-	t->Yaw += (float)delta_x * r_pi / 180.0f * t->Sensitivity * 0.1f;
-	t->Pitch += (float)delta_y * r_pi / 180.0f * t->Sensitivity * 0.1f;
-	t->Pitch = r_clamp(t->Pitch, -HalfPi, HalfPi);
+	g->Yaw += (float)delta_x * r_pi / 180.0f * g->Sensitivity * 0.1f;
+	g->Pitch += (float)delta_y * r_pi / 180.0f * g->Sensitivity * 0.1f;
+	g->Pitch = r_clamp(g->Pitch, -HalfPi, HalfPi);
 }
 
-void Game_Update(Game_p t, double Time)
+void Game_Update(Game_p g, double Time)
 {
-	if (!t) return;
+	float TouchingGroundY;
+	float Altitude;
+	double DeltaTime;
+	vec4_t ForwardVector;
+	vec4_t RightVector;
+	vec4_t AccelVector = vec4(0, 0, 0, 0);
+	vec4_t GroundNormal;
+	float TargetSpeed;
+	float Acceleration;
+	int Walking = 0;
+	vec4_t CamPos;
+	vec4_t Bobbing_Dir;
+	float Bobbing_Phase;
+	float Bobbing_X, Bobbing_Y;
+	float StandUpAccel = 0;
 
-	Game_SetCamera(t,
-		vec4(0, t->Player_Height + RayMap_GetAltitude(t->WalkMap, 0, 0), 0, 0),
-		mat4_rot_euler(t->Yaw, t->Pitch, t->Roll),
+	if (!g) return;
+
+	g->DeltaTime = DeltaTime = Time - g->LastTime;
+
+	Altitude = RayMap_GetAltitude(g->WalkMap, g->Player_Pos.x, g->Player_Pos.z);
+	TouchingGroundY = Altitude + g->Player_MaxHeight;
+
+	g->Player_IsCrouching = g->KBD_Status[GI_Crouch];
+	g->Player_IsJumping = g->KBD_Status[GI_Jump];
+
+	g->Player_Vel = vec4_add(g->Player_Vel, vec4_scale(g->Gravity, DeltaTime));
+	g->Player_Pos = vec4_add(g->Player_Pos, vec4_scale(g->Player_Vel, DeltaTime));
+
+	ForwardVector = vec4_mul_mat4(vec4(0, 0, 1, 0), mat4_rot_y(g->Yaw));
+	Acceleration = g->Player_Accel;
+	if (g->Player_Pos.y <= TouchingGroundY)
+	{
+		float MinY = Altitude + g->Player_MinHeight;
+		float TargetY = Altitude + (g->Player_IsCrouching ? g->Player_CrouchHeight : g->Player_Height);
+
+		StandUpAccel = -g->Gravity.y;
+		GroundNormal = RayMap_GetNormal(g->WalkMap, g->Player_Pos.x, g->Player_Pos.z, 1.0f);
+		RightVector = vec4_cross3(GroundNormal, ForwardVector);
+		ForwardVector = vec4_cross3(RightVector, GroundNormal);
+
+		if (g->Player_Pos.y <= MinY)
+		{
+			g->Player_Pos.y = MinY;
+			if (g->Player_Vel.y < 0)
+			{
+				g->Player_Vel = vec4_add(g->Player_Vel, vec4_scale(GroundNormal, -vec4_dot(GroundNormal, g->Player_Vel)));
+			}
+			StandUpAccel += Acceleration;
+		}
+		else if (g->Player_Pos.y <= TargetY)
+		{
+			StandUpAccel += r_min(Acceleration, (TargetY - g->Player_Pos.y) * 10.0f);
+		}
+		else
+		{
+			StandUpAccel += r_max(g->Gravity.y, (TargetY - g->Player_Pos.y) * 10.0f);
+		}
+
+		g->Player_Vel.y += StandUpAccel * DeltaTime;
+
+		if (g->Player_IsJumping)
+			g->Player_Vel.y = g->Player_Jump;
+		else
+		{
+			g->Player_Vel.y *= r_pow(g->Player_StandingDamp, DeltaTime);
+		}
+
+		g->Player_IsTouchingGround = 1;
+		TargetSpeed = g->Player_Speed;
+	}
+	else
+	{
+		TargetSpeed = g->Player_FlyingSpeed;
+		RightVector = vec4_mul_mat4(vec4(1, 0, 0, 0), mat4_rot_y(g->Yaw));
+		g->Player_IsTouchingGround = 0;
+	}
+
+	if (g->KBD_Status[GI_Forward]) { AccelVector = vec4_normalize(vec4_add(AccelVector, ForwardVector)); Walking = 1; }
+	if (g->KBD_Status[GI_Backward]) { AccelVector = vec4_normalize(vec4_sub(AccelVector, ForwardVector)); Walking = 1; }
+	if (g->KBD_Status[GI_Left]) { AccelVector = vec4_normalize(vec4_sub(AccelVector, RightVector)); Walking = 1; }
+	if (g->KBD_Status[GI_Right]) { AccelVector = vec4_normalize(vec4_add(AccelVector, RightVector)); Walking = 1; }
+
+	if (g->Player_IsTouchingGround)
+	{
+		vec4_t Direction, BiDir, Neutralized;
+		float Speed, SpeedWithFriction;
+		float Friction = g->Player_Friction;
+
+		if (vec4_length(g->Player_Vel) <= 0.001f)
+		{
+			if (Friction >= r_epsilon) g->Player_Vel = vec4(0, 0, 0, 0);
+		}
+		else
+		{
+			BiDir = vec4_cross3(GroundNormal, g->Player_Vel);
+			Direction = vec4_normalize(vec4_cross3(BiDir, GroundNormal));
+			Speed = vec4_dot(g->Player_Vel, Direction);
+			SpeedWithFriction = r_max(0, Speed - Friction * DeltaTime);
+
+			Neutralized = vec4_sub(g->Player_Vel, vec4_scale(Direction, Speed));
+			g->Player_Vel = vec4_add(Neutralized, vec4_scale(Direction, SpeedWithFriction));
+
+			g->Player_BobbingPhase = g->Player_BobbingPhase + Speed * g->Player_BobbingRate * DeltaTime;
+		}
+	}
+
+	if (Walking)
+	{
+		float Accel = 0;
+		float CurSpeed;
+		CurSpeed = vec4_dot(g->Player_Vel, AccelVector);
+		if (CurSpeed < TargetSpeed) Accel = r_min(TargetSpeed - CurSpeed, Acceleration);
+		else if (g->Player_IsTouchingGround) Accel = -r_min(CurSpeed - TargetSpeed, Acceleration);
+
+		g->Player_Vel = vec4_add(g->Player_Vel, vec4_scale(AccelVector, Accel * DeltaTime));
+	}
+
+	g->Player_Vel = vec4_scale(g->Player_Vel, r_pow(g->Player_SpeedDamp, DeltaTime));
+
+	Bobbing_Phase = g->Player_BobbingPhase * r_pi * 2;
+	Bobbing_X = r_sin(Bobbing_Phase);
+	Bobbing_Y = r_abs(r_cos(Bobbing_Phase)) * 2;
+	Bobbing_Dir = vec4(r_cos(g->Yaw), 0, -r_sin(g->Yaw), 0);
+	Bobbing_Dir = vec4_scale(Bobbing_Dir, Bobbing_X);
+	Bobbing_Dir.y += Bobbing_Y;
+	Bobbing_Dir = vec4_scale(Bobbing_Dir, g->Player_BobbingAmplitude);
+	CamPos = vec4_add(g->Player_Pos, Bobbing_Dir);
+
+	Game_SetCamera(g,
+		vec4(CamPos.x, CamPos.y, CamPos.z, 0),
+		mat4_rot_euler(g->Yaw, g->Pitch, g->Roll),
 		0.5f * r_pi);
+
+	g->LastTime = Time;
 }
 
-void Game_Render(Game_p t)
+void Game_Render(Game_p g)
 {
-	if (!t) return;
+	if (!g) return;
 
-	if (t->profile_task_per_line)
+	if (g->profile_task_per_line)
 	{
-		RenderTaskedPerLine(t);
+		RenderTaskedPerLine(g);
 	}
-	else if (t->profile_task_per_pixel)
+	else if (g->profile_task_per_pixel)
 	{
-		RenderTaskedPerPixel(t);
+		RenderTaskedPerPixel(g);
 	}
 
-	t->FrameCounter++;
+	g->FrameCounter++;
 }
 
-void Game_Free(Game_p t)
+void Game_Free(Game_p g)
 {
-	if (!t) return;
+	if (!g) return;
 
-	if (t->fp_log) fclose(t->fp_log);
+	if (g->fp_log) fclose(g->fp_log);
 
-	if (t->Albedo) CPUCan_DeleteTexture(t->CPUCan, Name_Game_Albedo);
-	RayMap_Unload(t->RayMap);
-	RayMap_Unload(t->WalkMap);
-	free(t);
+	if (g->Albedo) CPUCan_DeleteTexture(g->CPUCan, Name_Game_Albedo);
+	RayMap_Unload(g->RayMap);
+	RayMap_Unload(g->WalkMap);
+	free(g);
 }
 
 

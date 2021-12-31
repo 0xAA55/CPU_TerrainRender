@@ -28,14 +28,15 @@ typedef struct Game_struct
 	int profile_task_per_line;
 	int profile_task_per_pixel;
 
-	int x_res;
-	int y_res;
-	int interleave;
-	int x_scale;
-	int y_scale;
-	int interpolate;
-	uint32_t skycolor1;
-	uint32_t skycolor2;
+	int XRes;
+	int YRes;
+	int Interleave;
+	int XScaling;
+	int YScaling;
+	int Interpolate;
+	uint32_t Skycolor1;
+	uint32_t Skycolor2;
+	vec4_t Gravity;
 
 	ImgBuffer_p Albedo;
 	double AlbedoScale;
@@ -61,6 +62,25 @@ typedef struct Game_struct
 
 	float Player_Size;
 	float Player_Height;
+	float Player_MinHeight;
+	float Player_MaxHeight;
+	float Player_CrouchHeight;
+	float Player_StandingDamp;
+	float Player_Speed;
+	float Player_Accel;
+	float Player_Jump;
+	float Player_Friction;
+	float Player_FlyingSpeed;
+	float Player_SpeedDamp;
+	float Player_BobbingRate;
+	float Player_BobbingAmplitude;
+
+	vec4_t Player_Pos;
+	vec4_t Player_Vel;
+	int Player_IsTouchingGround;
+	int Player_IsCrouching;
+	int Player_IsJumping;
+	float Player_BobbingPhase;
 
 	double DeltaTime;
 	double LastTime;
