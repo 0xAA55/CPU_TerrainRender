@@ -60,7 +60,7 @@ jobs:
       run: |
         $NAME="Auto-Build $(Get-Date -Format 'yyyy/MM/dd-HH:mm')"
         $TAGNAME="autobuild-$(Get-Date -Format 'yyyy-MM-dd-HH-mm')"
-        hub release create -a CPU_TerrainRender.zip -m "$NAME" -t "master" $TAGNAME
+        hub release create -a CPU_TerrainRender.zip -m "$NAME" -t "main" $TAGNAME
         echo "::set-output name=tag_name::$TAGNAME"
       env:
         GITHUB_TOKEN: ${{ github.token }}
