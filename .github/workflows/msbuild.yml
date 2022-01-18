@@ -36,7 +36,7 @@ jobs:
     - name: Pack Up
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run:
-        Compress-Archive -DestinationPath "CPU_TerrainRender.zip" -Path "CPU_RENDERER_V2.exe", "LICENSE", "maps", "assets"
+        Compress-Archive -DestinationPath "CPU_TerrainRender.zip" -Path "CPU_RENDERER_V2.exe", "LICENSE", "config.cfg", "maps", "assets"
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
