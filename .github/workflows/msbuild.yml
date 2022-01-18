@@ -34,12 +34,12 @@ jobs:
     - name: Pack Up
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run:
-        Compress-Archive -DestinationPath "FontVideo_Bin.zip" -Path "FontVideo.exe", "LICENSE", "*.dll", "assets"
+        Compress-Archive -DestinationPath "CPU_TerrainRender.zip" -Path "CPU_RENDERER_V2.exe", "LICENSE", "maps", "assets"
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-        name: FontVideo
-        path: FontVideo_Bin.zip
+        name: CPU_TerrainRender
+        path: CPU_TerrainRender.zip
         
   Publish_Release:
     name: Publish Release
@@ -51,7 +51,7 @@ jobs:
     - name: Download artifacts
       uses: actions/download-artifact@v2
       with:
-        name: FontVideo
+        name: CPU_TerrainRender
         path: .
     - name: Create Release
       id: create_release
