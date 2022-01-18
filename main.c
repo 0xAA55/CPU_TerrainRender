@@ -133,7 +133,7 @@ static AppData_p App_Create(HWND hWnd)
 	App->CPUCan = CPUCan_CreateWithRGBAFB(App->BBWidth, App->BBHeight, App->BBPixelData);
 	if (!App->CPUCan) goto FailExit;
 
-	srand(GetTickCount64());
+	srand((unsigned int)GetTickCount64());
 
 	snprintf(StrBuf, sizeof StrBuf, "maps\\%d", (rand() % MapCount) + 1);
 	App->Game = Game_Create(App->CPUCan, ".", StrBuf, App->Config);

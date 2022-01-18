@@ -393,10 +393,10 @@ static int LoadMap(Game_p g, const char *MapDir)
 		dictcfg_getint(d_landview, "raw_altitude_blur", 0),
 		fp_log);
 	if (!g->RayMap) goto FailExit;
-	if (!LoadWalkMap(g, MapDir,
+	if (!LoadWalkMap(g, (char*)MapDir,
 		dictcfg_getstr(d_landview, "walk_altitude", "walk_altitude.bin"),
 		dictcfg_getstr(d_landview, "walk_k", "walk_k.bin"),
-		g->Player_Size,
+		(int)g->Player_Size,
 		fp_log)) goto FailExit;
 
 	PreRenderLighting(g);
@@ -627,8 +627,8 @@ void Game_Update(Game_p g, double Time)
 	g->Player_IsCrouching = g->KBD_Status[GI_Crouch];
 	g->Player_IsJumping = g->KBD_Status[GI_Jump];
 
-	g->Player_Vel = vec4_add(g->Player_Vel, vec4_scale(g->Gravity, DeltaTime));
-	g->Player_Pos = vec4_add(g->Player_Pos, vec4_scale(g->Player_Vel, DeltaTime));
+	g->Player_Vel = vec4_add(g->Player_Vel, vec4_scale(g->Gravity, (real_t)DeltaTime));
+	g->Player_Pos = vec4_add(g->Player_Pos, vec4_scale(g->Player_Vel, (real_t)DeltaTime));
 
 	ForwardVector = vec4_mul_mat4(vec4(0, 0, 1, 0), mat4_rot_y(g->Yaw));
 	Acceleration = g->Player_Accel;
@@ -638,7 +638,7 @@ void Game_Update(Game_p g, double Time)
 		float TargetY = Altitude + (g->Player_IsCrouching ? g->Player_CrouchHeight : g->Player_Height);
 
 		StandUpAccel = -g->Gravity.y;
-		GroundNormal = RayMap_GetNormal(g->WalkMap, g->Player_Pos.x, g->Player_Pos.z, 1.0f);
+		GroundNormal = RayMap_GetNormal(g->WalkMap, (int)g->Player_Pos.x, (int)g->Player_Pos.z, 1.0f);
 		RightVector = vec4_cross3(GroundNormal, ForwardVector);
 		ForwardVector = vec4_cross3(RightVector, GroundNormal);
 
@@ -660,13 +660,13 @@ void Game_Update(Game_p g, double Time)
 			StandUpAccel += r_max(g->Gravity.y, (TargetY - g->Player_Pos.y) * 10.0f);
 		}
 
-		g->Player_Vel.y += StandUpAccel * DeltaTime;
+		g->Player_Vel.y += StandUpAccel * (real_t)DeltaTime;
 
 		if (g->Player_IsJumping)
 			g->Player_Vel.y = g->Player_Jump;
 		else
 		{
-			g->Player_Vel.y *= r_pow(g->Player_StandingDamp, DeltaTime);
+			g->Player_Vel.y *= r_pow(g->Player_StandingDamp, (real_t)DeltaTime);
 		}
 
 		g->Player_IsTouchingGround = 1;
@@ -699,12 +699,12 @@ void Game_Update(Game_p g, double Time)
 			BiDir = vec4_cross3(GroundNormal, g->Player_Vel);
 			Direction = vec4_normalize(vec4_cross3(BiDir, GroundNormal));
 			Speed = vec4_dot(g->Player_Vel, Direction);
-			SpeedWithFriction = r_max(0, Speed - Friction * DeltaTime);
+			SpeedWithFriction = r_max(0, Speed - Friction * (real_t)DeltaTime);
 
 			Neutralized = vec4_sub(g->Player_Vel, vec4_scale(Direction, Speed));
 			g->Player_Vel = vec4_add(Neutralized, vec4_scale(Direction, SpeedWithFriction));
 
-			g->Player_BobbingPhase = g->Player_BobbingPhase + Speed * g->Player_BobbingRate * DeltaTime;
+			g->Player_BobbingPhase = g->Player_BobbingPhase + Speed * g->Player_BobbingRate * (real_t)DeltaTime;
 		}
 	}
 
@@ -716,10 +716,10 @@ void Game_Update(Game_p g, double Time)
 		if (CurSpeed < TargetSpeed) Accel = r_min(TargetSpeed - CurSpeed, Acceleration);
 		else if (g->Player_IsTouchingGround) Accel = -r_min(CurSpeed - TargetSpeed, Acceleration);
 
-		g->Player_Vel = vec4_add(g->Player_Vel, vec4_scale(AccelVector, Accel * DeltaTime));
+		g->Player_Vel = vec4_add(g->Player_Vel, vec4_scale(AccelVector, Accel * (real_t)DeltaTime));
 	}
 
-	g->Player_Vel = vec4_scale(g->Player_Vel, r_pow(g->Player_SpeedDamp, DeltaTime));
+	g->Player_Vel = vec4_scale(g->Player_Vel, r_pow(g->Player_SpeedDamp, (real_t)DeltaTime));
 
 	Bobbing_Phase = g->Player_BobbingPhase * r_pi * 2;
 	Bobbing_X = r_sin(Bobbing_Phase);
