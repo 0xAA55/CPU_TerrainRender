@@ -70,7 +70,7 @@ FailExit:
 
 ImgBuffer_p ImgBuffer_CreateFromBMPFile(const char *path)
 {
-	UniformBitmap_p UB = UB_CreateFromFile(path);
+	UniformBitmap_p UB = UB_CreateFromFile(path, NULL);
 	return ImgBuffer_ConvertFromUniformBitmap(&UB);
 }
 

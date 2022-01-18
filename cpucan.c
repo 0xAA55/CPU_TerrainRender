@@ -112,7 +112,7 @@ int LoadBMPTextureFromFile(CPUCan_p c, const char* path, const char* name_of_tex
 
 	if (dict_search(c->Textures, name_of_texture)) goto FailExit;
 
-	UB = UB_CreateFromFile(path);
+	UB = UB_CreateFromFile(path, NULL);
 	if (!UB) goto FailExit;
 
 	NewImg = ImgBuffer_ConvertFromUniformBitmap(&UB);
