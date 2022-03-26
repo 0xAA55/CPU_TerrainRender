@@ -50,8 +50,6 @@ static AppData_p App_Create(HWND hWnd)
 	HBITMAP DIB = NULL;
 	RECT rw, rc;
 	AppData_p App = NULL;
-	int MapCount;
-	char StrBuf[1024];
 	struct
 	{
 		BITMAPINFOHEADER BMIF;
@@ -86,7 +84,6 @@ static AppData_p App_Create(HWND hWnd)
 	d_render = dictcfg_section(App->Config, "[render]");
 	CfgXres = dictcfg_getint(d_render, "x_res", 1024);
 	CfgYres = dictcfg_getint(d_render, "y_res", 768);
-	MapCount = dictcfg_getint(d_render, "map_count", 1);
 
 	// 按照设置来配置窗口大小
 	GetWindowRect(hWnd, &rw);
@@ -130,14 +127,13 @@ static AppData_p App_Create(HWND hWnd)
 	SelectObject(App->BBDC, DIB);
 	DeleteObject(DIB); // 解引用
 
+	// 设置默认字体
+	DeleteObject(SelectObject(App->BBDC, GetStockObject(DEFAULT_GUI_FONT)));
+
 	App->CPUCan = CPUCan_CreateWithRGBAFB(App->BBWidth, App->BBHeight, App->BBPixelData);
 	if (!App->CPUCan) goto FailExit;
 
 	srand((unsigned int)GetTickCount64());
-
-	snprintf(StrBuf, sizeof StrBuf, "maps\\%d", (rand() % MapCount) + 1);
-	App->Game = Game_Create(App->CPUCan, ".", StrBuf, App->Config);
-	if (!App->Game) goto FailExit;
 
 	rttimer_init(&App->Tmr, 0);
 	SetTimer(hWnd, APP_UPDATE_TIMER, 1, NULL);
@@ -174,27 +170,43 @@ static void App_Update(HWND hWnd)
 	App = (AppData_p)GetWindowLongPtr(hWnd, 0);
 	if (!App) return;
 
-	Time = rttimer_gettime(&App->Tmr);
-
-	if (GetForegroundWindow() == hWnd)
+	if (App->Game)
 	{
-		GetWindowRect(hWnd, &rc);
-		GetCursorPos(&cursor_pos);
-		center_pos.x = (rc.right + rc.left) / 2;
-		center_pos.y = (rc.bottom + rc.top) / 2;
-		SetCursorPos(center_pos.x, center_pos.y);
+		Time = rttimer_gettime(&App->Tmr);
 
-		for (i = 0; i < GI_KeyCount; i++)
+		if (GetForegroundWindow() == hWnd)
 		{
-			Game_KBDInput(App->Game, i, GetAsyncKeyState(App->KeyConfig[i]));
+			GetWindowRect(hWnd, &rc);
+			GetCursorPos(&cursor_pos);
+			center_pos.x = (rc.right + rc.left) / 2;
+			center_pos.y = (rc.bottom + rc.top) / 2;
+			SetCursorPos(center_pos.x, center_pos.y);
+
+			for (i = 0; i < GI_KeyCount; i++)
+			{
+				Game_KBDInput(App->Game, i, GetAsyncKeyState(App->KeyConfig[i]));
+			}
+
+			Game_FPSInput(App->Game,
+				cursor_pos.x - center_pos.x,
+				cursor_pos.y - center_pos.y);
 		}
 
-		Game_FPSInput(App->Game,
-			cursor_pos.x - center_pos.x,
-			cursor_pos.y - center_pos.y);
+		Game_Update(App->Game, Time);
 	}
-
-	Game_Update(App->Game, Time);
+	else
+	{
+		char StrBuf[1024];
+		int MapCount;
+		MapCount = dictcfg_getint(dictcfg_section(App->Config, "[render]"), "map_count", 1);
+		snprintf(StrBuf, sizeof StrBuf, "maps\\%d", (rand() % MapCount) + 1);
+		App->Game = Game_Create(App->CPUCan, ".", StrBuf, App->Config);
+		if (!App->Game)
+		{
+			MessageBox(hWnd, TEXT("Unable to load map."), NULL, MB_ICONEXCLAMATION);
+			PostQuitMessage(2);
+		}
+	}
 }
 
 // 进行渲染
@@ -203,7 +215,17 @@ static void App_Render(HWND hWnd)
 	AppData_p App = (AppData_p)GetWindowLongPtr(hWnd, 0);
 	if (!App) return;
 
-	Game_Render(App->Game);
+	if (App->Game)
+	{
+		Game_Render(App->Game);
+	}
+	else
+	{
+		RECT rc = {0, 0, App->BBWidth, App->BBHeight};
+		const wchar_t StrPrompt[] = L"Loading Resources";
+		FillRect(App->BBDC, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+		DrawTextW(App->BBDC, StrPrompt, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
 }
 
 // 消息处理过程
