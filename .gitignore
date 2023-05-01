@@ -7,5 +7,3 @@ intermediate/
 lib/
 out/
 *.exe
-maps/*/*.bin
-maps/*/*.bin.bmp
