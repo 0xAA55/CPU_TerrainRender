@@ -4,36 +4,71 @@
 #include <stdint.h>
 #include <stdio.h>
 
-// 读入到内存的位图文件数据
-// 所有的位图格式在被读进来后，都会被转换为 ARGB 格式（每通道 8 bit 位深）
-// UniformBitmap意为“格式统一了的位图”
 typedef struct UniformBitmap_struct
 {
-	// 位图信息
+	// Size in pixels
 	uint32_t Width;
 	uint32_t Height;
 
-	// 位图DPI信息
+	// DPI info
 	uint32_t XPelsPerMeter;
 	uint32_t YPelsPerMeter;
 
-	// 位图数据
+	// Bitmap in top-to-bottom row order
 	uint32_t *BitmapData;
 
-	// 位图数据的行指针
+	// Row pointers of the bitmap
 	uint32_t **RowPointers;
 }UniformBitmap_t, *UniformBitmap_p;
 
-// 从文件创建位图
-// 位图不可以是RLE压缩，但位图可以是带位域的位图、带调色板的索引颜色位图。
-// 被读入后的图像数据会被强制转换为：ARGB 格式，每通道 8 bit 位深，每个像素4字节，分别是：蓝，绿，红，Alpha
-// 如果整个图像的Alpha通道皆为0（或者整个图像不包含Alpha通道）则读出来的位图的Alpha通道会被设置为最大值（即 255）
+// Create
+UniformBitmap_p UB_CreateNew(uint32_t Width, uint32_t Height);
+
+// Load. The alpha channel will be set to 255 if the bitmap file don't contains it.
 UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp);
+
+// Copy.
+UniformBitmap_p UB_CreateFromCopy(UniformBitmap_p Source);
 
 int UB_SaveToFile_24(UniformBitmap_p UB, const char *FilePath);
 int UB_SaveToFile_32(UniformBitmap_p UB, const char *FilePath);
 
-// 释放位图资源
 void UB_Free(UniformBitmap_p *pUB);
+
+#pragma pack(push, 1)
+
+typedef struct BitmapFileHeader_struct
+{
+	uint16_t bfType;
+	uint32_t bfSize;
+	uint16_t bfReserved1;
+	uint16_t bfReserved2;
+	uint32_t bfOffbits;
+}BitmapFileHeader_t, * BitmapFileHeader_p;
+
+typedef struct BitmapInfoHeader_struct
+{
+	uint32_t biSize;
+	int32_t biWidth;
+	int32_t biHeight;
+	uint16_t biPlanes;
+	uint16_t biBitCount;
+	uint32_t biCompression;
+	uint32_t biSizeImage;
+	uint32_t biXPelsPerMeter;
+	uint32_t biYPelsPerMeter;
+	uint32_t biClrUsed;
+	uint32_t biClrImportant;
+}BitmapInfoHeader_t, * BitmapInfoHeader_p;
+
+#pragma pack(pop)
+
+enum BitmapCompression
+{
+	BI_RGB = 0,
+	BI_RLE8 = 1,
+	BI_RLE4 = 2,
+	BI_Bitfields = 3
+};
 
 #endif

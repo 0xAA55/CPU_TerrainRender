@@ -5,45 +5,8 @@
 #include<string.h>
 #include<errno.h>
 
-#pragma pack(push, 1)
+#include"bunchalloc.h"
 
-// 位图文件头
-typedef struct BitmapFileHeader_struct
-{
-	uint16_t bfType;
-	uint32_t bfSize;
-	uint16_t bfReserved1;
-	uint16_t bfReserved2;
-	uint32_t bfOffbits;
-}BitmapFileHeader_t, *BitmapFileHeader_p;
-
-// 位图信息头
-typedef struct BitmapInfoHeader_struct
-{
-	uint32_t biSize;
-	int32_t biWidth;
-	int32_t biHeight;
-	uint16_t biPlanes;
-	uint16_t biBitCount;
-	uint32_t biCompression;
-	uint32_t biSizeImage;
-	uint32_t biXPelsPerMeter;
-	uint32_t biYPelsPerMeter;
-	uint32_t biClrUsed;
-	uint32_t biClrImportant;
-}BitmapInfoHeader_t, *BitmapInfoHeader_p;
-
-#pragma pack(pop)
-
-enum BitmapCompression
-{
-	BI_RGB = 0,
-	BI_RLE8 = 1,
-	BI_RLE4 = 2,
-	BI_Bitfields = 3
-};
-
-// 取得位域位置
 static uint32_t GetBitfieldShift(uint32_t Bitfield)
 {
 	uint32_t Shift = 0;
@@ -61,7 +24,6 @@ static uint32_t GetBitfieldShift(uint32_t Bitfield)
 	return Shift - 8;
 }
 
-// 取得位域位数
 static uint32_t GetBitfieldBitCount(uint32_t Bitfield)
 {
 	uint32_t Count = 0;
@@ -75,107 +37,151 @@ static uint32_t GetBitfieldBitCount(uint32_t Bitfield)
 	return Count;
 }
 
-// 生成颜色值
 static uint32_t ARGB(uint8_t R, uint8_t G, uint8_t B, uint8_t A)
 {
 	union Pixel
 	{
 		uint8_t u8[4];
 		uint32_t u32;
-	}Block = { B, G, R, A};
+	}Block = {{ B, G, R, A}};
 	return Block.u32;
 }
 
-// 从文件创建位图
-// 位图不可以是RLE压缩，但位图可以是带位域的位图、带调色板的索引颜色位图。
-// 被读入后的图像数据会被强制转换为：ARGB 格式，每通道 8 bit 位深，每个像素4字节，分别是：蓝，绿，红，Alpha
-// 如果整个图像的Alpha通道皆为0（或者整个图像不包含Alpha通道）则读出来的位图的Alpha通道会被设置为最大值（即 255）
+static void UB_SetupRowPointers(UniformBitmap_p UB, int is_bottom_to_top)
+{
+	size_t i;
+	if (is_bottom_to_top)
+	{
+		uint32_t MaxY = UB->Height - 1;
+		for (i = 0; i < UB->Height; i++)
+		{
+			UB->RowPointers[i] = &UB->BitmapData[(MaxY - i) * UB->Width];
+		}
+	}
+	else
+	{
+		for (i = 0; i < UB->Height; i++)
+		{
+			UB->RowPointers[i] = &UB->BitmapData[i * UB->Width];
+		}
+	}
+}
+
+// Create new blank UniformBitmap
+UniformBitmap_p UB_CreateNew(uint32_t Width, uint32_t Height)
+{
+	UniformBitmap_p UB = NULL;
+
+	// UB = calloc(1, sizeof * UB);
+	UB = bunchalloc(16, sizeof UB[0],
+		offsetof(UniformBitmap_t, RowPointers), (size_t)Height * sizeof UB->RowPointers[0],
+		offsetof(UniformBitmap_t, BitmapData), (size_t)Width * Height * sizeof UB->BitmapData[0],
+		0, 0);
+	if (!UB) return NULL;
+
+	UB->Width = Width;
+	UB->Height = Height;
+
+	// UB->BitmapData = calloc((size_t)Width * Height, sizeof UB->BitmapData[0]);
+	// UB->RowPointers = malloc(Height * sizeof UB->RowPointers[0]);
+	// if (!UB->BitmapData || !UB->RowPointers) goto FailExit;
+
+	UB_SetupRowPointers(UB, 0);
+	return UB;
+}
+
+// Create UniformBitmap from a `bmp` file.
+// The `bmp` file shouldn't be RLE compressed. Currently not implemented.
+// Indexed-color bitmap and bitmap with bitfields are supported.
+// All bitmap loaded will be converted to:
+// - ARGB format
+// - Each channel is 8-bit, thus each pixel is 32-bit, from low to high is: blue, green, red, alpha(255)
+// If the whole bitmap is loaded and all of the pixels don't contain alpha information (as all alpha value is 0),
+// the alpha value will be set to 255 for every pixel.
 UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 {
 	BitmapFileHeader_t BMFH;
 	BitmapInfoHeader_t BMIF;
 	UniformBitmap_p UB = NULL;
-	size_t Pitch; // 原位图文件每行像素的总字节数（包含对齐）
-	uint32_t Palette[256]; // 调色板，如果有，要读入
-	unsigned PaletteColorCount = 0;
-	uint32_t Bitfields[3]; // 位域，如果有，要读入
-	uint32_t Bitfield_A = 0; // 透明通道的位域，通常没有透明通道。
+	size_t Pitch; // Bytes per line of pixels
+	uint32_t Palette[256]; // If the `bmp` contains a palette, will be loaded here.
+	unsigned PaletteColorCount = 0; // How many colors in the palette.
+	uint32_t Bitfields[3]; // If the `bmp` contains a bitfields, will be loaded here.
+	uint32_t Bitfield_A = 0; // The bitfield for the alpha channel. Normally, there are no alpha channel bitfields.
 	uint8_t *ReadInLineBuffer = NULL;
 	size_t i;
+	uint32_t Width;
+	uint32_t Height;
 
-	// 准备读取文件
+	// Open file for read
 	FILE *fp = fopen(FilePath, "rb");
 	if (!fp)
 	{
-		fprintf(log_fp, "打不开文件：%s （%s）\n",
-			FilePath, strerror(errno));
+		fprintf(log_fp, "Could not open %s (%s)\n", FilePath, strerror(errno));
 		return NULL;
 	}
 
-	// 读取位图文件头
+	// Read the file header
 	if (fread(&BMFH, sizeof BMFH, 1, fp) != 1)
 	{
-		fprintf(log_fp, "读取位图文件 %s 的位图文件头失败：%s\n",
-			FilePath, strerror(errno));
+		fprintf(log_fp, "Read bitmap file header failed. %s (%s)\n", FilePath, strerror(errno));
 		goto FailExit;
 	}
 
-	// 判断头部字段是否合理
+	// Check if the fields of the header is good
 	if (BMFH.bfType != 0x4D42 || !BMFH.bfOffbits)
 	{
-		fprintf(log_fp, "这大概不是一个BMP位图文件。");
+		fprintf(log_fp, "Load bitmap file failed: this is probably not a `bmp` file. %s\n", FilePath);
 		goto FailExit;
 	}
 
-	// 读取位图信息头
+	// Read the info header
 	if (fread(&BMIF, sizeof BMIF, 1, fp) != 1)
 	{
-		fprintf(log_fp, "读取位图文件 %s 的位图信息头失败：%s\n",
-			FilePath, strerror(errno));
+		fprintf(log_fp, "Read bitmap info header failed. %s (%s)\n", FilePath, strerror(errno));
 		goto FailExit;
 	}
 
+	// Check if the fields of the info header is good
 	if (!BMIF.biPlanes || !BMIF.biWidth || !BMIF.biHeight)
 	{
-		fprintf(log_fp, "位图文件 %s 的位图信息头的内容不合理。\n", FilePath);
+		fprintf(log_fp, "Load bitmap file failed: corrupted bitmap info header. %s\n", FilePath);
 		goto FailExit;
 	}
 
-	// 判断位图的压缩方式
+	// Check the compression method of the bitmap file
 	switch (BMIF.biCompression)
 	{
 	case BI_Bitfields:
-		// 有位域，读取位域信息
+		// If it has bitfields, read it for processing.
 		if (fread(&Bitfields, sizeof Bitfields, 1, fp) != 1)
 		{
-			fprintf(log_fp, "读取位图文件 %s 的位域信息失败：%s\n",
-				FilePath, strerror(errno));
+			fprintf(log_fp, "Read bitmap file bitfield failed. %s (%s)\n", FilePath, strerror(errno));
 			goto FailExit;
 		}
 		break;
 	case BI_RLE4:
 	case BI_RLE8:
-		fprintf(log_fp, "位图文件 %s 使用了RLE压缩。暂不支持RLE压缩的位图，懒得弄。\n", FilePath);
+		fprintf(log_fp, "The bitmap file is RLE-compressed, decompression is not implemented. %s\n", FilePath);
 		goto FailExit;
 	case BI_RGB:
-		// 没有位域，但是有调色板，读取调色板信息
 		switch (BMIF.biBitCount)
 		{
+		// No bitfields, but palette, read the palette.
 		case 1: case 2: case 4: case 8:
 			if (BMIF.biClrUsed) PaletteColorCount = BMIF.biClrUsed;
 			else PaletteColorCount = (1u << BMIF.biBitCount);
 			if (fread(&Palette, 4, PaletteColorCount, fp) != PaletteColorCount)
 			{
-				fprintf(log_fp, "读取位图文件 %s 的调色板信息失败：%s\n",
-					FilePath, strerror(errno));
+				fprintf(log_fp, "Read bitmap palette failed. %s (%s)\n", FilePath, strerror(errno));
 				goto FailExit;
 			}
-			// 检测调色板的Alpha通道是否包含数据
+			// Check if the palette contains alpha data (normally no alpha data should be here)
 			for (i = 0; i < PaletteColorCount; i++)
 			{
 				if (Palette[i] & 0xff000000) break;
 			}
-			// Alpha通道不包含数据时，将Alpha通道设置为255
+			// If no alpha data here, the alpha is set to 255.
 			if (i == PaletteColorCount)
 			{
 				for (i = 0; i < PaletteColorCount; i++)
@@ -185,6 +191,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 			}
 			break;
 		case 16:
+			// The general bitfields for the 16-bit bitmap.
 			Bitfields[0] = 0x7c00;
 			Bitfields[1] = 0x03e0;
 			Bitfields[2] = 0x001f;
@@ -192,85 +199,84 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 			break;
 		case 24:
 		case 32:
+			// The general bitfields for the 24-bit or 32-bit bitmap.
 			Bitfields[0] = 0xff0000;
 			Bitfields[1] = 0x00ff00;
 			Bitfields[2] = 0x0000ff;
 			break;
 		default:
-			fprintf(log_fp, "位图文件 %s 的位图信息头的内容不合理：颜色位数是 %d。\n", FilePath, (int)BMIF.biBitCount);
+			fprintf(log_fp, "Load bitmap file failed: Unknown bit count `%d`. %s\n", (int)BMIF.biBitCount, FilePath);
 			goto FailExit;
 		}
 		break;
 	default:
-		fprintf(log_fp, "位图文件 %s 的位图信息头的内容不合理。\n", FilePath);
+		fprintf(log_fp, "Load bitmap file failed: Unknown compression method `%u`. %s\n", (int)BMIF.biCompression, FilePath);
 		goto FailExit;
 	}
 
-	// 设置文件指针指向位图数据
+	// Seek to the bitmap data
 	fseek(fp, BMFH.bfOffbits, SEEK_SET);
 
-	// 分配内存，存储解析的图像的信息
-	UB = malloc(sizeof UB[0]);
+	Width = BMIF.biWidth;
+	Height = BMIF.biHeight < 0 ? -BMIF.biHeight : BMIF.biHeight;
+
+	// UB = malloc(sizeof UB[0]);
+	UB = bunchalloc(16, sizeof UB[0],
+		offsetof(UniformBitmap_t, RowPointers), (size_t)Height * sizeof UB->RowPointers[0],
+		offsetof(UniformBitmap_t, BitmapData), (size_t)Width * Height * sizeof UB->BitmapData[0],
+		0, 0);
 	if (!UB)
 	{
-		perror("不应该呀");
+		perror("Allocate memory for UniformBitmap");
 		goto FailExit;
 	}
 
-	UB->Width = BMIF.biWidth;
-	UB->Height = BMIF.biHeight < 0 ? -BMIF.biHeight : BMIF.biHeight;
+	UB->Width = Width;
+	UB->Height = Height;
 
-	// 保留DPI信息
 	UB->XPelsPerMeter = BMIF.biXPelsPerMeter;
 	UB->YPelsPerMeter = BMIF.biYPelsPerMeter;
 
-	// 位图数据Buffer
-	UB->BitmapData = malloc((size_t)UB->Width * UB->Height * sizeof UB->BitmapData[0]);
-	if (!UB->BitmapData)
-	{
-		perror("分配内存用于存储位图数据");
-		goto FailExit;
-	}
-	UB->RowPointers = malloc(UB->Height * sizeof UB->RowPointers[0]);
-	if (!UB->RowPointers)
-	{
-		perror("分配内存用于存储位图数据行指针");
-		goto FailExit;
-	}
-	// 位图的存储既可以是正常行序也可以是颠倒行序
+	// UB->BitmapData = malloc((size_t)UB->Width * UB->Height * sizeof UB->BitmapData[0]);
+	// if (!UB->BitmapData)
+	// {
+	// 	perror("Allocate memory for bitmap");
+	// 	goto FailExit;
+	// }
+	// UB->RowPointers = malloc(UB->Height * sizeof UB->RowPointers[0]);
+	// if (!UB->RowPointers)
+	// {
+	// 	perror("Allocate memory for bitmap row pointers");
+	// 	goto FailExit;
+	// }
+	// Check the row order of the bitmap file, unify it to top-bottom
 	if (BMIF.biHeight < 0)
 	{
-		for (i = 0; i < UB->Height; i++)
-		{
-			UB->RowPointers[i] = &UB->BitmapData[i * UB->Width];
-		}
+		UB_SetupRowPointers(UB, 0);
 	}
 	else
 	{
-		for (i = 0; i < UB->Height; i++)
-		{
-			UB->RowPointers[i] = &UB->BitmapData[(UB->Height - i - 1) * UB->Width];
-		}
+		UB_SetupRowPointers(UB, 1);
 	}
 
 	Pitch = ((size_t)(BMIF.biWidth * BMIF.biBitCount - 1) / 32 + 1) * 4;
 	ReadInLineBuffer = malloc(Pitch);
 	if (!ReadInLineBuffer)
 	{
-		perror("分配内存用于按行读取源位图行");
+		perror("Allocate memory for read bitmap by rows");
 		goto FailExit;
 	}
 
-	// 开始读取位图
+	// Start read the bitmap
 	switch (BMIF.biCompression)
 	{
-		// 原始位图不包含位域信息
+		// If no bitfields
 	case BI_RGB:
 	{
-		// 根据位数判断是否为调色板颜色
+		// Check if it has a palette
 		switch (BMIF.biBitCount)
 		{
-			// 每个字节可能包含多个像素
+			// Every byte may contain more than 1 pixel.
 		case 1: case 2: case 4:
 		{
 			uint32_t x, y;
@@ -285,7 +291,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 				uint32_t *Row = UB->RowPointers[y];
 				if (fread(ReadInLineBuffer, 1, Pitch, fp) != Pitch)
 				{
-					perror("未读取完整位图行");
+					perror("Could not read a complete row of the bitmap");
 					goto FailExit;
 				}
 				for (x = 0; x < UB->Width; x++)
@@ -303,7 +309,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 			}
 			break;
 		}
-		// 一个字节一个像素，字节值即为像素索引
+		// Every byte is a pixel, the byte value is the index of the palette
 		case 8:
 		{
 			uint32_t x, y;
@@ -312,7 +318,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 				uint32_t *Row = UB->RowPointers[y];
 				if (fread(ReadInLineBuffer, 1, Pitch, fp) != Pitch)
 				{
-					perror("未读取完整位图行");
+					perror("Could not read a complete row of the bitmap");
 					goto FailExit;
 				}
 				for (x = 0; x < UB->Width; x++)
@@ -322,7 +328,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 			}
 			break;
 		}
-		// 非索引颜色，每16个bit按照从高到低 1:5:5:5 存储 ARGB 四个通道
+		// Non-palette color, every 16-bit is a pixel, the bitfields for ARGB is 1:5:5:5
 		case 16:
 		{
 			uint32_t x, y;
@@ -332,7 +338,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 				uint32_t *Row = UB->RowPointers[y];
 				if (fread(ReadInLineBuffer, 1, Pitch, fp) != Pitch)
 				{
-					perror("未读取完整位图行");
+					perror("Could not read a complete row of the bitmap");
 					goto FailExit;
 				}
 				for (x = 0; x < UB->Width; x++)
@@ -362,7 +368,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 			}
 			break;
 		}
-		// 非索引颜色，每通道1字节
+		// Non-palette color, every byte is a color channel for the pixel
 		case 24:
 		{
 			uint32_t x, y;
@@ -371,7 +377,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 				uint32_t *Row = UB->RowPointers[y];
 				if (fread(ReadInLineBuffer, 1, Pitch, fp) != Pitch)
 				{
-					perror("未读取完整位图行");
+					perror("Could not read a complete row of the bitmap");
 					goto FailExit;
 				}
 				for (x = 0; x < UB->Width; x++)
@@ -385,7 +391,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 			}
 			break;
 		}
-		// 非索引颜色，每通道1字节，可能包含Alpha通道
+		// Non-palette color, every byte is a color channel for the pixel, may contain alpha
 		case 32:
 		{
 			uint32_t x, y;
@@ -395,7 +401,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 				uint32_t *Row = UB->RowPointers[y];
 				if (fread(ReadInLineBuffer, 1, Pitch, fp) != Pitch)
 				{
-					perror("未读取完整位图行");
+					perror("Could not read a complete row of the bitmap");
 					goto FailExit;
 				}
 				for (x = 0; x < UB->Width; x++)
@@ -406,6 +412,17 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 						ReadInLineBuffer[ByteIndex + 0],
 						ReadInLineBuffer[ByteIndex + 3]);
 					if (ReadInLineBuffer[ByteIndex + 3]) HasAlpha = 1;
+				}
+			}
+			if (!HasAlpha)
+			{
+				for (y = 0; y < UB->Height; y++)
+				{
+					uint32_t *Row = UB->RowPointers[y];
+					for (x = 0; x < UB->Width; x++)
+					{
+						Row[x] &= 0xFF000000;
+					}
 				}
 			}
 			break;
@@ -429,7 +446,7 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 
 		if (!BytesPerPixels)
 		{
-			fprintf(log_fp, "包含位域信息的位图的每像素位数应当超过8。\n");
+			fprintf(log_fp, "A bitmap file with bit count less than 8 should not have bitfields. %s\n", FilePath);
 			goto FailExit;
 		}
 
@@ -439,12 +456,12 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 			uint8_t *PixelPointer = ReadInLineBuffer;
 			if (fread(ReadInLineBuffer, 1, Pitch, fp) != Pitch)
 			{
-				perror("未读取完整位图行");
+				perror("Could not read a complete row of the bitmap");
 				goto FailExit;
 			}
 			for (x = 0; x < UB->Width; x++)
 			{
-				// 将一个像素的全部数据读入，再拆出其红绿蓝各个通道的颜色值
+				// Read a whole pixel bits into a `uint32_t`, then try to dismantle it.
 				uint32_t PixelData = *(uint32_t *)PixelPointer;
 				uint32_t RV = PixelData & ((Bitfields[0]) >> RShift);
 				uint32_t GV = PixelData & ((Bitfields[1]) >> GShift);
@@ -461,19 +478,22 @@ UniformBitmap_p UB_CreateFromFile(const char *FilePath, FILE *log_fp)
 				if (BBC) while (BBC < 8) { BV |= BV >> BBC; BBC *= 2; } else BV = 255;
 				if (ABC) while (ABC < 8) { AV |= AV >> ABC; ABC *= 2; } else AV = 255;
 
-				Row[x] = ARGB((uint8_t)RBC, (uint8_t)GBC, (uint8_t)BBC, (uint8_t)ABC);
+				Row[x] = ARGB((uint8_t)RV, (uint8_t)GV, (uint8_t)BV, (uint8_t)AV);
 			}
 		}
 		break;
 	}
 
 	default:
-		fprintf(log_fp, "既非位域格式又非RGB格式，停止解析。\n");
+		fprintf(log_fp, "The bitmap file is neither bitfield encoded nor RGB encoded, could not be loaded there. %s\n", FilePath);
 		goto FailExit;
 	}
 
 	fclose(fp);
 	free(ReadInLineBuffer);
+
+	// After a success read (the readed bitmap is top-to-bottom), the row pointers should also be set to top-to-bottom
+	UB_SetupRowPointers(UB, 0);
 
 	return UB;
 FailExit:
@@ -489,8 +509,8 @@ int UB_SaveToFile_24(UniformBitmap_p UB, const char *FilePath)
 	size_t Pitch;
 	uint8_t *Buffer = NULL;
 	uint32_t x, y;
-	BitmapFileHeader_t BMFH;
-	BitmapInfoHeader_t BMIF;
+	BitmapFileHeader_t BMFH = {0};
+	BitmapInfoHeader_t BMIF = {0};
 
 	if (!UB || !FilePath) return 0;
 
@@ -529,7 +549,7 @@ int UB_SaveToFile_24(UniformBitmap_p UB, const char *FilePath)
 		{
 			uint8_t u8[4];
 			uint32_t u32;
-		} * RowPtr = (void*)UB->RowPointers[UB->Height - 1 - y];
+		} * RowPtr = (void*)UB->RowPointers[UB->Height - 1 - y]; // Store as bottom-to-top order
 		uint8_t *Ptr = Buffer;
 		for (x = 0; x < UB->Width; x++)
 		{
@@ -554,8 +574,8 @@ int UB_SaveToFile_32(UniformBitmap_p UB, const char *FilePath)
 	FILE *fp = NULL;
 	size_t Pitch;
 	uint32_t y;
-	BitmapFileHeader_t BMFH;
-	BitmapInfoHeader_t BMIF;
+	BitmapFileHeader_t BMFH = {0};
+	BitmapInfoHeader_t BMIF = {0};
 
 	if (!UB || !FilePath) return 0;
 
@@ -587,7 +607,7 @@ int UB_SaveToFile_32(UniformBitmap_p UB, const char *FilePath)
 
 	for (y = 0; y < UB->Height; y++)
 	{
-		uint32_t *RowPtr = UB->RowPointers[UB->Height - 1 - y];
+		uint32_t *RowPtr = UB->RowPointers[UB->Height - 1 - y]; // Store as bottom-to-top order
 		if (!fwrite(RowPtr, Pitch, 1, fp)) goto FailExit;
 	}
 
@@ -598,6 +618,38 @@ FailExit:
 	return 0;
 }
 
+// 复制位图
+UniformBitmap_p UB_CreateFromCopy(UniformBitmap_p Source)
+{
+	UniformBitmap_p NewUB;
+	size_t BitmapSize;
+	uint32_t Width, Height;
+
+	if (!Source) return NULL;
+
+	Width = Source->Width;
+	Height = Source->Height;
+	BitmapSize = (size_t)Width * Height * sizeof Source->BitmapData[0];
+
+	NewUB = bunchalloc(16, sizeof NewUB[0],
+		offsetof(UniformBitmap_t, RowPointers), (size_t)Height * sizeof NewUB->RowPointers[0],
+		offsetof(UniformBitmap_t, BitmapData), BitmapSize,
+		0, 0);
+	if (!NewUB) return NULL;
+
+
+	NewUB->Width = Source->Width;
+	NewUB->Height = Source->Height;
+	NewUB->XPelsPerMeter = Source->XPelsPerMeter;
+	NewUB->YPelsPerMeter = Source->YPelsPerMeter;
+
+	memcpy(NewUB->BitmapData, Source->BitmapData, BitmapSize);
+
+	UB_SetupRowPointers(NewUB, 0);
+
+	return NewUB;
+}
+
 // 释放位图资源
 void UB_Free(UniformBitmap_p *pUB)
 {
@@ -606,8 +658,6 @@ void UB_Free(UniformBitmap_p *pUB)
 		UniformBitmap_p UB = *pUB;
 		*pUB = NULL;
 
-		free(UB->BitmapData);
-		free(UB->RowPointers);
-		free(UB);
+		bunchfree(UB);
 	}
 }
