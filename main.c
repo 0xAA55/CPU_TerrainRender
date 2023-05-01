@@ -200,6 +200,7 @@ static void App_Update(HWND hWnd)
 		int MapCount;
 		MapCount = dictcfg_getint(dictcfg_section(App->Config, "[render]"), "map_count", 1);
 		snprintf(StrBuf, sizeof StrBuf, "maps\\%d", (rand() % MapCount) + 1);
+		// snprintf(StrBuf, sizeof StrBuf, "maps\\%d", 1);
 		App->Game = Game_Create(App->CPUCan, ".", StrBuf, App->Config);
 		if (!App->Game)
 		{
