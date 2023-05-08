@@ -7,6 +7,7 @@
 #include<string.h>
 #include<math.h>
 #include<errno.h>
+#include<assert.h>
 
 static const char *Name_Game_Albedo = "Game_Albedo";
 
