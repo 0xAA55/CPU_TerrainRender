@@ -3,6 +3,8 @@
 #include<stdlib.h>
 #include<string.h>
 
+#include"bunchalloc.h"
+
 static size_t CalcAlign(size_t Size, size_t Align)
 {
 	return ((Size - 1) / Align + 1) * Align;
@@ -71,12 +73,15 @@ FailExit:
 ImgBuffer_p ImgBuffer_CreateFromBMPFile(const char *path)
 {
 	UniformBitmap_p UB = UB_CreateFromFile(path, NULL);
-	return ImgBuffer_ConvertFromUniformBitmap(&UB);
+	ImgBuffer_p ret = ImgBuffer_ConvertFromUniformBitmap(&UB);
+	if (!ret) UB_Free(&UB);
+	return ret;
 }
 
 ImgBuffer_p ImgBuffer_ConvertFromUniformBitmap(UniformBitmap_p *ppUB)
 {
 	ImgBuffer_p pBuf = NULL;
+	ptrdiff_t y;
 
 	if (!ppUB || !ppUB[0]) return NULL;
 
@@ -91,12 +96,23 @@ ImgBuffer_p ImgBuffer_ConvertFromUniformBitmap(UniformBitmap_p *ppUB)
 	pBuf->RowAlign = 4;
 	pBuf->Pitch = (size_t)ppUB[0]->Width * 4;
 	pBuf->BufferSize = pBuf->Pitch * pBuf->Height;
-	pBuf->Buffer = ppUB[0]->BitmapData;
-	pBuf->RowPointers = (void **)ppUB[0]->RowPointers;
 	pBuf->OwnBuffer = 1;
 
-	free(ppUB[0]); ppUB[0] = NULL;
+	pBuf->Buffer = malloc(pBuf->Pitch * pBuf->Height);
+	pBuf->RowPointers = malloc(pBuf->Height * sizeof pBuf->RowPointers[0]);
+	if (!pBuf->Buffer || !pBuf->RowPointers) goto FailExit;
+#pragma omp parallel for
+	for (y = 0; y < pBuf->Height; y++)
+	{
+		pBuf->RowPointers[y] = &((uint32_t*)pBuf->Buffer)[y * pBuf->Width];
+		memcpy(pBuf->RowPointers[y], ppUB[0]->RowPointers[y], pBuf->Pitch);
+	}
+
+	UB_Free(ppUB);
 	return pBuf;
+FailExit:
+	ImgBuffer_Destroy(pBuf);
+	return NULL;
 }
 
 UniformBitmap_p ImgBuffer_ConvertToUniformBitmap(ImgBuffer_p *ppIB)
